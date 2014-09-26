@@ -8,6 +8,7 @@ import (
 	"net"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 )
 
@@ -15,74 +16,116 @@ const PORT = 8888
 
 var world *World
 var debugLog, infoLog, errorLog *log.Logger
+var idGen func() int = KeyGen()
+
+//
+// Generate unique IDs for objects
+//
+
+func KeyGen() func() int {
+	c := 0
+	return func() int {
+		c += 1
+		return c
+	}
+}
+
+// Wrapper for net.Conn with some convenience functions
+type Connection struct {
+	conn net.Conn
+}
+
+func (c *Connection) tell(msg string, args ...interface{}) {
+	s := fmt.Sprintf(msg, args...)
+	c.conn.Write([]byte(s))
+}
+
+type Room struct {
+	key int
+	name, description string
+}
+
+// Room implements Object interface
+func (r Room) Key() int { return r.key }
+func (r Room) Name() string { return r.name }
+func (r Room) Description() string { return r.description }
+
+type Exit struct {
+	key int
+	name, description string
+}
+
+// Exit implements Object interface
+func (e Exit) Key() int { return e.key }
+func (e Exit) Name() string { return e.name }
+func (e Exit) Description() string { return e.description }
+
+type Player struct {
+	key int
+	name, description string
+	conn *Connection
+	location *Room
+}
+
+// Player implements Object interface
+func (p Player) Key() int { return p.key }
+func (p Player) Name() string { return p.name }
+func (p Player) Description() string { return p.description }
 
 type World struct {
 	players Set
 	rooms Set
-}
-
-type Room struct {
-	name, description string
-}
-
-type Player struct {
-	name, description string
-	conn net.Conn
-	location *Room
+	exits Set
 }
 
 func NewWorld() *World {
-	return &World{}
-}
-
-func (w *World) NewPlayer(name string, location *Room) (*Player, error) {
-
-	player := &Player{name: name, location: location}
-
-	if w.players.ContainsWhere(func (i interface{}) bool {return true}) {
-		return nil, errors.New("User already exists")
-	} else {
-		w.players.Add(player)
-		return player, nil
-	}
+	return &World{NewSet(), NewSet(), NewSet()}
 }
 
 func (w *World) NewRoom(name string) (r *Room, err error) {
-	r = &Room{name: name}
+	r = &Room{key: idGen(), name: name}
 	w.rooms.Add(r)
-	// No errors, for now
+
 	return
 }
 
-//
-// Connect a player
-//
-func (w *World) ConnectPlayer(name string, conn net.Conn) (p *Player, err error) {
-
-	users := w.players.Find(func (i interface{}) bool {
-		return i.(Player).name == name
-	})
-
-	if len(users) != 1 {
-		err = errors.New("User not found")
+func (w *World) NewPlayer(name string, location *Room) (p *Player, err error) {
+	if w.players.ContainsWhere(func (o Object) bool {return o.Name() == name}) {
+		err = errors.New("User already exists")
 	} else {
-		var pl Player = users[0].(Player)
-		pl.conn = conn
+		p = &Player{key: idGen(), name: name, location: location}
+		w.players.Add(p)
 	}
 
 	return
 }
 
-//
-// Disconnect a player
-//
-func (w *World) DisconnectPlayer(name string) (p *Player, err error) {
-	p = w.players[name]
+func (w *World) ConnectPlayer(name string, conn net.Conn) (p *Player, err error) {
 
-	if p == nil {
-		err = errors.New("User not found")
+	player := w.players.SelectFirst(func (o Object) bool {
+		return o.Name() == name
+	})
+
+	if player != nil {
+		p = player.(*Player)
+		p.conn = &Connection{conn}
 	} else {
+		err = errors.New("Player not found")
+	}
+
+	return 
+}
+
+func (w *World) DisconnectPlayer(name string) (p *Player, err error) {
+	player := w.players.SelectFirst(func (o Object) bool {
+		return o.Name() == name
+	})
+
+	if player != nil {
+		p = player.(*Player)
 		p.conn = nil
+	} else {
+		err = errors.New("User not found")
 	}
 
 	return
@@ -92,14 +135,15 @@ func (w *World) DisconnectPlayer(name string) (p *Player, err error) {
 // Send a message to a player
 //
 func (p *Player) tell(msg string, args ...interface{}) {
-	s := fmt.Sprintf(msg, args...)
-	p.conn.Write([]byte(s))
+	if p.conn != nil {
+		p.conn.tell(msg, args...)
+	}
 }
 
 //
 // Handle a single client connection loop
 //
-func playerLoop(conn net.Conn) {
+func connectionLoop(conn net.Conn) {
 	linebuf := make([]byte, 1024, 1024)
 
 	// Loop on input and handle it.
@@ -115,7 +159,9 @@ func playerLoop(conn net.Conn) {
 			break
 		}
 
-		debugLog.Println("User said:", string(linebuf[:n]))
+		line := strings.TrimSpace(string(linebuf[:n]))
+
+		debugLog.Println("User said:", line)
 
 		conn.Write([]byte("Huh?\r\n"))
 	}
@@ -135,7 +181,6 @@ func initWorld() {
 // Main entry point
 //
 func main() {
-
 	debugLog = log.New(os.Stdout, "[DEBUG] ", log.Ldate|log.Ltime|log.Lshortfile)
 	infoLog = log.New(os.Stdout, "[INFO] ", log.Ldate|log.Ltime|log.Lshortfile)
 	errorLog = log.New(os.Stderr, "[ERROR] ", log.Ldate|log.Ltime|log.Lshortfile)
@@ -174,7 +219,7 @@ func main() {
 				continue
 			}
 
-			go playerLoop(conn)
+			go connectionLoop(conn)
 		}
 	}()
 

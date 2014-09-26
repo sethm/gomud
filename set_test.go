@@ -1,13 +1,15 @@
 package main
 
 import "testing"
-
-func TestNewSet(t *testing.T) {
-	NewSet()
-}
+import "regexp"
 
 type TestObject struct {
+	key int
 	name, description string
+}
+
+func (o TestObject) Key() int {
+	return o.key
 }
 
 func (o TestObject) Name() string {
@@ -18,10 +20,14 @@ func (o TestObject) Description() string {
 	return o.description
 }
 
+func TestNewSet(t *testing.T) {
+	NewSet()
+}
+
 func TestAdd(t *testing.T) {
 	s := NewSet()
 
-	if !s.Add(&TestObject{"bob", "Bob is tall"}) {
+	if !s.Add(&TestObject{0, "bob", "Bob is tall"}) {
 		t.Errorf("Should have been able to add bob")
 	}
 }
@@ -29,134 +35,199 @@ func TestAdd(t *testing.T) {
 func TestAddCannotAddDuplicates(t *testing.T) {
  	s := NewSet()
 
- 	s.Add(&TestObject{"bob", "Bob is tall"})
+ 	s.Add(&TestObject{1, "bob", "Bob is tall"})
 	
- 	if s.Add(&TestObject{"bob", "Bob is tall"}) {
+ 	if s.Add(&TestObject{1, "bob", "Bob is tall"}) {
  		t.Errorf("Should not be able to add duplicates to the set.")
  	}
- }
+}
 
-// func TestContains(t *testing.T) {
-// 	s := NewSet()
+func TestContains(t *testing.T) {
+	s := NewSet()
+	o := &TestObject{1, "bob", "Bob is tall"}
 
-// 	if s.Contains(5) {
-// 		t.Errorf("Should not contain '5'")
-// 	}
+	if s.Contains(o) {
+		t.Errorf("Should not contain bob")
+	}
 
-// 	s.Add(5)
+	s.Add(o)
 
-// 	if !s.Contains(5) {
-// 		t.Errorf("Should contain '5'")
-// 	}
-// }
+	if !s.Contains(o) {
+		t.Errorf("Should contain bob")
+	}
+}
 
-// func TestRemoveRemovesItem(t *testing.T) {
-// 	s := NewSet()
-// 	s.Add(5)
-// 	s.Add(202)
+func TestRemoveRemovesItem(t *testing.T) {
+	s := NewSet()
+	bob := &TestObject{0, "bob", "Bob is tall."}
+	bill := &TestObject{1, "bill", "Bill is short."}
 
-// 	if !s.Contains(5) || !s.Contains(202) {
-// 		t.Errorf("Set is not in expected state.")
-// 	}
+	s.Add(bob)
+	s.Add(bill)
 
-// 	s.Remove(5)
+	if !s.Contains(bob) || !s.Contains(bill) {
+		t.Errorf("Set is not in expected state.")
+	}
 
-// 	if s.Contains(5) || !s.Contains(202) {
-// 		t.Errorf("Set is not in expected state.")
-// 	}
+	s.Remove(bob)
 
-// 	s.Remove(202)
+	if s.Contains(bob) || !s.Contains(bill) {
+		t.Errorf("Set is not in expected state.")
+	}
 
-// 	if s.Contains(5) || s.Contains(202) {
-// 		t.Errorf("Set is not in expected state.")
-// 	}
+	s.Remove(bill)
 
-// 	// Should cause no errors
-// 	s.Remove(1234)
-// }
+	if s.Contains(bob) || s.Contains(bill) {
+		t.Errorf("Set is not in expected state.")
+	}
 
-// func TestFind(t *testing.T) {
-// 	s := NewSet()
-// 	s.Add(5)
-// 	s.Add(8)
-// 	s.Add(15)
+	// Should cause no errors
+	s.Remove(&TestObject{2, "jane", "Jane was never in the set."})
+}
 
-// 	fiveFinder := func (i interface{}) bool {
-// 		return i.(int) == 5
-// 	}
+func TestSelectFirst(t *testing.T) {
+	s := NewSet()
 
-// 	fifteenFinder := func (i interface{}) bool {
-// 		return i.(int) % 5 == 0 && i.(int) % 3 == 0
-// 	}
+	bob := &TestObject{0, "bob", "Bob is tall."}
+	bill := &TestObject{1, "bill", "Bill is short."}
+	jane := &TestObject{2, "jane", "Jane is tall, too."}
 
-// 	twelveFinder := func (i interface{}) bool {
-// 		return i.(int) == 12
-// 	}
+	s.Add(bob)
+	s.Add(bill)
+	s.Add(jane)
 
-// 	divisibleByFiveFinder := func (i interface{}) bool {
-// 		return i.(int) % 5 == 0
-// 	}
+	bobSelector := func (o Object) bool {
+		return o.Name() == "bob"
+	}
 
-// 	i := s.Find(fiveFinder)
-// 	j := s.Find(fifteenFinder)
-// 	k := s.Find(twelveFinder)
-// 	l := s.Find(divisibleByFiveFinder)
+	billSelector := func (o Object) bool {
+		return o.Name() == "bill"
+	}
 
-// 	if len(i) != 1 || i[0] != 5 {
-// 		t.Errorf("Should have found '5'")
-// 	}
+	georgeSelector := func (o Object) bool {
+		return o.Name() == "george"
+	}
 
-// 	if len(j) != 1 || j[0] != 15 {
-// 		t.Errorf("Should have found '15'")
-// 	}
+	tallSelector := func (o Object) bool {
+		match, _ := regexp.MatchString("tall", o.Description())
+		return match
+	}
 
-// 	if len(k) != 0 {
-// 		t.Errorf("Should not have found '12'")
-// 	}
+	i := s.SelectFirst(bobSelector)
+	j := s.SelectFirst(billSelector)
+	k := s.SelectFirst(georgeSelector)
+	l := s.SelectFirst(tallSelector)
 
-// 	if len(l) != 2 ||
-// 		(l[0] != 5 && l[1] != 5) ||
-// 		(l[0] != 15 && l[1] != 15) {
-// 		t.Errorf("Should have found '5' and '15'")
-// 	}
-// }
+	if i != bob {
+		t.Errorf("Should have selected Bob")
+	}
 
-// func TestContainsWhere(t *testing.T) {
-// 	s := NewSet()
+	if j != bill {
+		t.Errorf("Should have selected Bill")
+	}
 
-// 	s.Add(5)
-// 	s.Add(8)
-// 	s.Add(15)
+	if k != nil {
+		t.Errorf("Should not have selected anyone")
+	}
 
-// 	fiveFinder := func (i interface{}) bool {
-// 		return i.(int) == 5
-// 	}
+	if l != bob && l != jane {
+		t.Errorf("Should have selected Bob or Jane")
+	}
+}
 
-// 	fifteenFinder := func (i interface{}) bool {
-// 		return i.(int) % 5 == 0 && i.(int) % 3 == 0
-// 	}
+func TestSelect(t *testing.T) {
+	s := NewSet()
 
-// 	twelveFinder := func (i interface{}) bool {
-// 		return i.(int) == 12
-// 	}
+	bob := &TestObject{0, "bob", "Bob is tall."}
+	bill := &TestObject{1, "bill", "Bill is short."}
+	jane := &TestObject{2, "jane", "Jane is tall, too."}
 
-// 	divisibleByFiveFinder := func (i interface{}) bool {
-// 		return i.(int) % 5 == 0
-// 	}
+	s.Add(bob)
+	s.Add(bill)
+	s.Add(jane)
 
-// 	if !s.ContainsWhere(fiveFinder) {
-// 		t.Errorf("Should have returned true for ContainsWhere")
-// 	}
+	bobSelector := func (o Object) bool {
+		return o.Name() == "bob"
+	}
 
-// 	if !s.ContainsWhere(fifteenFinder) {
-// 		t.Errorf("Should have returned true for ContainsWhere")
-// 	}
+	billSelector := func (o Object) bool {
+		return o.Name() == "bill"
+	}
 
-// 	if s.ContainsWhere(twelveFinder) {
-// 		t.Errorf("Should have returned false for ContainsWhere")
-// 	}
+	georgeSelector := func (o Object) bool {
+		return o.Name() == "george"
+	}
 
-// 	if !s.ContainsWhere(divisibleByFiveFinder) {
-// 		t.Errorf("Should have returned true for ContainsWhere")
-// 	}
-// }
+	tallSelector := func (o Object) bool {
+		match, _ := regexp.MatchString("tall", o.Description())
+		return match
+	}
+
+	i := s.Select(bobSelector)
+	j := s.Select(billSelector)
+	k := s.Select(georgeSelector)
+	l := s.Select(tallSelector)
+
+	if len(i) != 1 || i[0] != bob {
+		t.Errorf("Should have found bob")
+	}
+
+	if len(j) != 1 || j[0] != bill {
+		t.Errorf("Should have found bill ")
+	}
+
+	if len(k) != 0 {
+		t.Errorf("Should not have found george")
+	}
+
+	if len(l) != 2 ||
+		(l[0] != bob && l[1] != bob) ||
+		(l[0] != jane && l[1] != jane) {
+		t.Errorf("Should have found bob and jane")
+	}
+}
+
+func TestContainsWhere(t *testing.T) {
+	s := NewSet()
+
+	bob := &TestObject{0, "bob", "Bob is tall."}
+	bill := &TestObject{1, "bill", "Bill is short."}
+	jane := &TestObject{2, "jane", "Jane is tall, too."}
+
+	s.Add(bob)
+	s.Add(bill)
+	s.Add(jane)
+
+	bobSelector := func (o Object) bool {
+		return o.Name() == "bob"
+	}
+
+	billSelector := func (o Object) bool {
+		return o.Name() == "bill"
+	}
+
+	georgeSelector := func (o Object) bool {
+		return o.Name() == "george"
+	}
+
+	tallSelector := func (o Object) bool {
+		match, _ := regexp.MatchString("tall", o.Description())
+		return match
+	}
+
+	if !s.ContainsWhere(bobSelector) {
+		t.Errorf("Should have found bob")		
+	}
+
+	if !s.ContainsWhere(billSelector) {
+		t.Errorf("Should have found bill")
+	}
+
+	if s.ContainsWhere(georgeSelector) {
+		t.Errorf("Should not have found george")
+	}
+
+	if !s.ContainsWhere(tallSelector) {
+		t.Errorf("Should have found bill and jane")
+	}
+}
