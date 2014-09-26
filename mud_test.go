@@ -1,119 +1,172 @@
 package main
 
-import "io"
-import "errors"
+import "time"
+import "net"
 import "testing"
 
-// Build some fake readers and writers for testing
+//
+// Implement a mock version of net.Conn for testing
+//
 
-type FakeReader struct {
+type MockConn struct {
 	readBytes [][]byte
-	readError *error
-	quitAfter int
-	timesCalled int
-}
-
-func (r *FakeReader) Read(p []byte) (n int, err error) {
-	if r.timesCalled >= r.quitAfter {
-		return 0, *r.readError
-	} else {
-		read := copy(p, r.readBytes[r.timesCalled])
-		r.timesCalled++
-		return read, nil
-	}
-}
-
-func NewFakeReader(quitAfter int, err *error) *FakeReader {
-	return &FakeReader{make([][]byte, 1024, 1024), err, quitAfter, 0}
-}
-
-type FakeWriter struct {
 	writtenBytes []byte
+
+	readError *error
+	closeAfterWrites int
+	numWrites int
 	writtenBytePtr int
 }
 
-func (w *FakeWriter) Write(p []byte) (n int, err error) {
-	written := copy(w.writtenBytes[w.writtenBytePtr:], p)
-	w.writtenBytePtr += written
+func (conn MockConn) Read(b []byte) (n int, err error) {
+	read := copy(b, conn.readBytes[conn.numWrites])
+	conn.numWrites++
+	return read, nil
+}
+
+func (conn MockConn) Write(b []byte) (n int, err error) {
+	written := copy(conn.writtenBytes[conn.writtenBytePtr:], b)
+	conn.writtenBytePtr += written
 	return written, nil
 }
 
-func NewFakeWriter() *FakeWriter {
-	return &FakeWriter{make([]byte, 1024, 1024), 0}
+func (conn MockConn) Close() error {
+	return nil
 }
 
-// Verify that print writes to its writer
+func (conn MockConn) LocalAddr() net.Addr {
+	return &net.IPAddr{net.IPv4(192, 168, 1, 1), ""}
+}
 
-func TestPrint(t *testing.T) {
-	w := NewFakeWriter()
+func (conn MockConn) RemoteAddr() net.Addr {
+	return &net.IPAddr{net.IPv4(192, 168, 1, 1), ""}
+}
 
-	print(w, "Hello, world!")
+func (conn MockConn) SetDeadline(t time.Time) error {
+	return nil
+}
 
-	actual := string(w.writtenBytes[0:14])
-	if actual != "Hello, world!\u0000" {
-		t.Errorf("`print` did not write bytes correctly: '%s'", actual)
+func (conn MockConn) SetReadDeadline(t time.Time) error {
+	return nil
+}
+
+func (conn MockConn) SetWriteDeadline(t time.Time) error {
+	return nil
+}
+
+func NewMockConn() *MockConn {
+	return &MockConn{readBytes: make([][]byte, 1024, 1024),	writtenBytes: make([]byte, 1024, 1024)}
+}
+
+// Create a new world, with no players.
+
+func TestNewWorld(t *testing.T) {
+	w := NewWorld()
+
+	if len(w.players) != 0 {
+		t.Errorf("Expected world to exist and have 0 players.")
 	}
 }
 
-// Verify that println writes to its writer
+// Create a player in the world.
+func TestNewPlayer(t *testing.T) {
+	world := NewWorld()
+	bob,_ := world.NewPlayer("bob")
 
-func TestPrintLn(t *testing.T) {
-	w := NewFakeWriter()
-
-	println(w, "Hello, world!")
-
-	actual := string(w.writtenBytes[0:16])
-	if actual != "Hello, world!\r\n\u0000" {
-		t.Errorf("`println` did not write bytes correctly: '%s'", actual)
-	}
-}
-
-// Verify that the main loop starts up, and will quit if 
-// the FakeReader returns any kind of error
-
-func TestMainLoopTerminatesOnReadError(t *testing.T) {
-	err := errors.New("FakeError")
-
-	r := NewFakeReader(1, &err)
-	w := NewFakeWriter()
-
- 	mainLoop(r, w)
-
-	actual := string(w.writtenBytes[0:25])
-	if actual != "mud> Error : FakeError\r\n\u0000" {
-		t.Errorf("Unexpected read: '%s'", actual)
-	}
-	
-}
-
-// Verify that the main loop will exit cleanly if its
-// Reader returns io.EOF
-
-func TestMainLoopTerminatesOnEof(t *testing.T) {
-	r := NewFakeReader(0, &io.EOF)
-	w := NewFakeWriter()
-
-	mainLoop(r, w)
-
-	actual := string(w.writtenBytes[0:6])
-	if actual != "mud> \u0000" {
-		t.Errorf("Unexpected read: '%s'", actual)
+	if bob.name != "bob" {
+		t.Errorf("Expected player name to be bob, but was %s", bob.name)
 	}
 	
 }
 
-// Just give an un-handled command as input, so we know
-// we'll see "Huh?" as the response.
+func TestNewPlayerCantReuseNames(t *testing.T) {
+	world := NewWorld()
+	bob, err := world.NewPlayer("bob")
+	if bob == nil {
+		t.Errorf("User should not have been nil")
+	}
 
-func TestMainLoopHandlesInput(t *testing.T) {
-	r := NewFakeReader(1, &io.EOF)
-	r.readBytes[0] = []byte("foo\r\n")
-	w := NewFakeWriter()
+	if err != nil {
+		t.Errorf("Should have been no error creating the user")
+	}
 
-	mainLoop(r, w)
+	otherBob, err := world.NewPlayer("bob")
+	if otherBob != nil {
+		t.Errorf("User should have been nil")
+	}
 
-	actual := string(w.writtenBytes[0:17])
-	if actual != "mud> Huh?\r\nmud> \u0000" {
-		t.Errorf("Unexpected read: '%s'", actual)
+	if err == nil {
+		t.Errorf("An error was expected")
+	}
+	
+	
+}
+
+func TestConnectPlayerSucceedsWhenPlayerFound(t *testing.T) {
+	world := NewWorld()
+	conn := NewMockConn()
+	world.NewPlayer("bob")
+	bob, err := world.ConnectPlayer("bob", conn)
+
+	if (err != nil) {
+		t.Errorf("Could not find player:", err)
+	}
+
+	if (bob.conn != conn) {
+		t.Errorf("Should have connected the user.")
+	}
+}
+
+func TestConnectPlayerFailsWhenPlayerNotFound(t *testing.T) {
+	world := NewWorld()
+	conn := NewMockConn()
+	bob, err := world.ConnectPlayer("bob", conn)
+
+	if (bob != nil || err == nil) {
+		t.Errorf("Expected player not to be found.")
+	}
+}
+
+func TestDisconnectPlayerSucceedsWhenPlayerFound(t *testing.T) {
+	world := NewWorld()
+	conn := NewMockConn()
+	world.NewPlayer("bob")
+	bob, err := world.ConnectPlayer("bob", conn)
+
+	if (err != nil) {
+		t.Errorf("Could not find player:", err)
+	}
+	
+	world.DisconnectPlayer("bob")
+	
+	if (bob.conn != nil) {
+		t.Errorf("Should have disconnected the user.")
+	}
+}
+
+func TestDisconnectPlayerFailsWhenPlayerNotFound(t *testing.T) {
+	world := NewWorld()
+	bob, err := world.DisconnectPlayer("bob")
+	
+	if (bob != nil || err == nil) {
+		t.Errorf("Expected player not to be found.")
+	}
+}
+
+func TestTell(t *testing.T) {
+	world := NewWorld()
+	conn := NewMockConn()
+	world.NewPlayer("bob")
+	bob, err := world.ConnectPlayer("bob", conn)
+
+	if (err != nil) {
+		t.Errorf("Could not find player:", err)
+	}
+
+	bob.tell("Hello, world!\n")
+
+	actual := string(conn.writtenBytes[0:15])
+	if actual != "Hello, world!\n\u0000" {
+		t.Errorf("`tell` did not write bytes correctly: '%s'", actual)
 	}
 }
