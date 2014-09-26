@@ -68,44 +68,49 @@ func TestNewWorld(t *testing.T) {
 	}
 }
 
+// Create a room in the world.
+func TestNewRoom(t *testing.T) {
+	world := NewWorld()
+	hall, err := world.NewRoom("The Hall")
+	if hall == nil || err != nil {	
+		t.Errorf("Expected to create a new room.")
+	}
+	if len(world.rooms) != 1 || !world.rooms[hall] {
+		t.Errorf("Expected room to have been added to the world.")
+	}
+}
+
 // Create a player in the world.
 func TestNewPlayer(t *testing.T) {
 	world := NewWorld()
-	bob,_ := world.NewPlayer("bob")
-
+	hall,_ := world.NewRoom("The Hall")
+	bob,_ := world.NewPlayer("bob", hall)
 	if bob.name != "bob" {
 		t.Errorf("Expected player name to be bob, but was %s", bob.name)
 	}
-	
+	if bob.location != hall {
+		t.Errorf("Expected player's location to be the hall")
+	}
+	if len(world.players) != 1 || world.players["bob"] != bob {
+		t.Errorf("Expected player to have been added to world.")
+	}
 }
 
 func TestNewPlayerCantReuseNames(t *testing.T) {
 	world := NewWorld()
-	bob, err := world.NewPlayer("bob")
-	if bob == nil {
-		t.Errorf("User should not have been nil")
+	hall,_ := world.NewRoom("The Hall")
+	world.NewPlayer("bob", hall)
+	otherBob, err := world.NewPlayer("bob", hall)
+	if otherBob != nil || err == nil {
+		t.Errorf("Should not have been able to create duplicate user")
 	}
-
-	if err != nil {
-		t.Errorf("Should have been no error creating the user")
-	}
-
-	otherBob, err := world.NewPlayer("bob")
-	if otherBob != nil {
-		t.Errorf("User should have been nil")
-	}
-
-	if err == nil {
-		t.Errorf("An error was expected")
-	}
-	
-	
 }
 
 func TestConnectPlayerSucceedsWhenPlayerFound(t *testing.T) {
 	world := NewWorld()
+	hall,_ := world.NewRoom("The Hall")
 	conn := NewMockConn()
-	world.NewPlayer("bob")
+	world.NewPlayer("bob", hall)
 	bob, err := world.ConnectPlayer("bob", conn)
 
 	if (err != nil) {
@@ -129,8 +134,9 @@ func TestConnectPlayerFailsWhenPlayerNotFound(t *testing.T) {
 
 func TestDisconnectPlayerSucceedsWhenPlayerFound(t *testing.T) {
 	world := NewWorld()
+	hall,_ := world.NewRoom("The Hall")
 	conn := NewMockConn()
-	world.NewPlayer("bob")
+	world.NewPlayer("bob", hall)
 	bob, err := world.ConnectPlayer("bob", conn)
 
 	if (err != nil) {
@@ -155,8 +161,9 @@ func TestDisconnectPlayerFailsWhenPlayerNotFound(t *testing.T) {
 
 func TestTell(t *testing.T) {
 	world := NewWorld()
+	hall,_ := world.NewRoom("The Hall")
 	conn := NewMockConn()
-	world.NewPlayer("bob")
+	world.NewPlayer("bob", hall)
 	bob, err := world.ConnectPlayer("bob", conn)
 
 	if (err != nil) {

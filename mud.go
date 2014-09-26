@@ -17,40 +17,65 @@ var world *World
 var debugLog, infoLog, errorLog *log.Logger
 
 type World struct {
-	players map[string]*Player
+	players Set
+	rooms Set
+}
+
+type Room struct {
+	name, description string
 }
 
 type Player struct {
 	name, description string
 	conn net.Conn
+	location *Room
 }
 
 func NewWorld() *World {
-	return &World{players: make(map[string]*Player)}
+	return &World{}
 }
 
-func (w *World) NewPlayer(name string) (*Player, error) {
-	player := &Player{name: name}
-	if w.players[name] != nil {
+func (w *World) NewPlayer(name string, location *Room) (*Player, error) {
+
+	player := &Player{name: name, location: location}
+
+	if w.players.ContainsWhere(func (i interface{}) bool {return true}) {
 		return nil, errors.New("User already exists")
 	} else {
-		w.players[name] = player
+		w.players.Add(player)
 		return player, nil
 	}
 }
 
-func (w *World) ConnectPlayer(name string, conn net.Conn) (p *Player, err error) {
-	p = w.players[name]
+func (w *World) NewRoom(name string) (r *Room, err error) {
+	r = &Room{name: name}
+	w.rooms.Add(r)
+	// No errors, for now
+	return
+}
 
-	if p == nil {
+//
+// Connect a player
+//
+func (w *World) ConnectPlayer(name string, conn net.Conn) (p *Player, err error) {
+
+	users := w.players.Find(func (i interface{}) bool {
+		return i.(Player).name == name
+	})
+
+	if len(users) != 1 {
 		err = errors.New("User not found")
 	} else {
-		p.conn = conn
+		var pl Player = users[0].(Player)
+		pl.conn = conn
 	}
 
 	return
 }
 
+//
+// Disconnect a player
+//
 func (w *World) DisconnectPlayer(name string) (p *Player, err error) {
 	p = w.players[name]
 
@@ -63,6 +88,9 @@ func (w *World) DisconnectPlayer(name string) (p *Player, err error) {
 	return
 }
 
+//
+// Send a message to a player
+//
 func (p *Player) tell(msg string, args ...interface{}) {
 	s := fmt.Sprintf(msg, args...)
 	p.conn.Write([]byte(s))
@@ -96,6 +124,9 @@ func playerLoop(conn net.Conn) {
 	conn.Close()
 }
 
+//
+// Build up the world.
+//
 func initWorld() {
 	world = NewWorld()
 }
