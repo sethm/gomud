@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"net"
 	"os"
 	"os/signal"
@@ -13,6 +14,7 @@ import (
 const PORT = 8888
 
 var world *World
+var debugLog, infoLog, errorLog *log.Logger
 
 type World struct {
 	players map[string]*Player
@@ -37,25 +39,25 @@ func (w *World) NewPlayer(name string) (*Player, error) {
 	}
 }
 
-func (w *World) ConnectPlayer(name string, conn net.Conn) (*Player, error) {
-	player := w.players[name]
+func (w *World) ConnectPlayer(name string, conn net.Conn) (p *Player, err error) {
+	p = w.players[name]
 
-	if player == nil {
-		return player, errors.New("User not found")
+	if p == nil {
+		err = errors.New("User not found")
 	} else {
-		player.conn = conn
-		return player, nil
+		p.conn = conn
 	}
+
+	return
 }
 
 func (w *World) DisconnectPlayer(name string) (p *Player, err error) {
 	p = w.players[name]
-	err = nil
 
-	if p != nil {
-		p.conn = nil
-	} else {
+	if p == nil {
 		err = errors.New("User not found")
+	} else {
+		p.conn = nil
 	}
 
 	return
@@ -80,17 +82,17 @@ func playerLoop(conn net.Conn) {
 
 		if err != nil {
 			if err != io.EOF {
-				fmt.Println("[ERR] Error:", err)
+				errorLog.Println("Error:", err)
 			}
 			break
 		}
 
-		fmt.Print("[DBG] User said:", string(linebuf[:n]))
+		debugLog.Println("User said:", string(linebuf[:n]))
 
 		conn.Write([]byte("Huh?\r\n"))
 	}
 
-	fmt.Println("[INFO] Disconnection from", conn.RemoteAddr())
+	infoLog.Println("Disconnection from", conn.RemoteAddr())
 	conn.Close()
 }
 
@@ -103,26 +105,30 @@ func initWorld() {
 //
 func main() {
 
+	debugLog = log.New(os.Stdout, "[DEBUG] ", log.Ldate|log.Ltime|log.Lshortfile)
+	infoLog = log.New(os.Stdout, "[INFO] ", log.Ldate|log.Ltime|log.Lshortfile)
+	errorLog = log.New(os.Stderr, "[ERROR] ", log.Ldate|log.Ltime|log.Lshortfile)
+
 	sigs := make(chan os.Signal, 2)
 	signal.Notify(sigs, os.Interrupt, syscall.SIGTERM)
 	stopRequested := make(chan bool)
 
 	go func() {
 		<-sigs
-		fmt.Println("[INFO] SIGTERM received.")
+		infoLog.Println("SIGTERM received.")
 		stopRequested<- true
 	}()
 
-	fmt.Println("[INFO] Starting server...")
+	infoLog.Println("Starting server...")
 
 	ln, err := net.Listen("tcp", fmt.Sprintf(":%d", PORT))
 
 	if err != nil {
-		fmt.Println("[ERR] Could not start server:", err)
+		errorLog.Println("Could not start server:", err)
 		return
 	}
 
-	fmt.Println("[INFO] Server listening on port", PORT)
+	infoLog.Println("Server listening on port", PORT)
 
 	initWorld()
 
@@ -130,10 +136,10 @@ func main() {
 		for {
 			conn, err := ln.Accept()
 		
-			fmt.Println("[INFO] Accepted connection from:", conn.RemoteAddr())
+			infoLog.Println("Accepted connection from:", conn.RemoteAddr())
 
 			if err != nil {
-				fmt.Println("[ERR] Could not accept connection:", err)
+				errorLog.Println("Could not accept connection:", err)
 				continue
 			}
 
@@ -145,5 +151,5 @@ func main() {
 
 	// Notify all clients, clean up resources, etc.
 
-	fmt.Println("[INFO] Shutdown complete. Goodbye!")
+	infoLog.Println("Shutdown complete. Goodbye!")
 }
