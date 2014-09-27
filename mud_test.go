@@ -117,78 +117,39 @@ func TestNewPlayerCantReuseNames(t *testing.T) {
 	}
 }
 
-func TestConnectPlayerSucceedsWhenPlayerFound(t *testing.T) {
-	world := NewWorld()
-	hall,_ := world.NewRoom("The Hall")
-	conn := NewMockConn()
-	world.NewPlayer("bob", hall)
-	bob, err := world.ConnectPlayer("bob", conn)
-
-	if err != nil {
-		t.Errorf("Could not find player:", err)
-	}
-
-	if bob == nil {
-		t.Errorf("Bob was nil but should not have been.")
-	} 
-
-	if bob.conn.conn != conn {
-		t.Errorf("Should have connected the user.")
-	}
-}
-
-func TestConnectPlayerFailsWhenPlayerNotFound(t *testing.T) {
-	world := NewWorld()
-	conn := NewMockConn()
-	bob, err := world.ConnectPlayer("bob", conn)
-
-	if (bob != nil || err == nil) {
-		t.Errorf("Expected player not to be found.")
-	}
-}
-
-func TestDisconnectPlayerSucceedsWhenPlayerFound(t *testing.T) {
-	world := NewWorld()
-	hall,_ := world.NewRoom("The Hall")
-	conn := NewMockConn()
-	world.NewPlayer("bob", hall)
-	bob, err := world.ConnectPlayer("bob", conn)
-
-	if (err != nil) {
-		t.Errorf("Could not find player:", err)
-	}
-	
-	world.DisconnectPlayer("bob")
-	
-	if (bob.conn != nil) {
-		t.Errorf("Should have disconnected the user.")
-	}
-}
-
-func TestDisconnectPlayerFailsWhenPlayerNotFound(t *testing.T) {
-	world := NewWorld()
-	bob, err := world.DisconnectPlayer("bob")
-	
-	if (bob != nil || err == nil) {
-		t.Errorf("Expected player not to be found.")
-	}
-}
-
 func TestTell(t *testing.T) {
-	world := NewWorld()
-	hall,_ := world.NewRoom("The Hall")
 	conn := NewMockConn()
-	world.NewPlayer("bob", hall)
-	bob, err := world.ConnectPlayer("bob", conn)
-
-	if (err != nil) {
-		t.Errorf("Could not find player:", err)
-	}
-
-	bob.tell("Hello, world!\n")
+	client := &Client{conn: conn}
+	client.tell("Hello, world!\n")
 
 	actual := string(conn.writtenBytes[0:15])
 	if actual != "Hello, world!\n\u0000" {
 		t.Errorf("`tell` did not write bytes correctly: '%s'", actual)
+	}
+}
+
+func TestNewExit(t *testing.T) {
+	world := NewWorld()
+	hall,_ := world.NewRoom("The Hall")
+	den,_ := world.NewRoom("The Den")
+
+	_, err1 := hall.NewExit("east", den)
+	_, err2 := den.NewExit("west", hall)
+
+	if err1 != nil || err2 != nil {
+		t.Errorf("Error while creating exits.")
+	}
+}
+
+func TestNewExitFailsWhenCreatingDuplicateExits(t *testing.T) {
+	world := NewWorld()
+	hall,_ := world.NewRoom("The Hall")
+	den,_ := world.NewRoom("The Den")
+
+	hall.NewExit("east", den)
+	exit, err := hall.NewExit("east", hall)
+
+	if exit != nil || err == nil {
+		t.Errorf("Creating exit should have failed.")
 	}
 }

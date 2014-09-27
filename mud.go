@@ -15,6 +15,7 @@ import (
 const PORT = 8888
 
 var world *World
+var connections Set
 var debugLog, infoLog, errorLog *log.Logger
 var idGen func() int = KeyGen()
 
@@ -31,28 +32,24 @@ func KeyGen() func() int {
 }
 
 // Wrapper for net.Conn with some convenience functions
-type Connection struct {
+type Client struct {
 	conn net.Conn
+	player *Player
 }
 
-func (c *Connection) tell(msg string, args ...interface{}) {
+func NewClient(conn net.Conn) *Client {
+	return &Client{conn: conn}
+}
+
+func (c *Client) tell(msg string, args ...interface{}) {
 	s := fmt.Sprintf(msg, args...)
 	c.conn.Write([]byte(s))
 }
 
-type Room struct {
-	key int
-	name, description string
-}
-
-// Room implements Object interface
-func (r Room) Key() int { return r.key }
-func (r Room) Name() string { return r.name }
-func (r Room) Description() string { return r.description }
-
 type Exit struct {
 	key int
 	name, description string
+	destination *Room
 }
 
 // Exit implements Object interface
@@ -60,10 +57,35 @@ func (e Exit) Key() int { return e.key }
 func (e Exit) Name() string { return e.name }
 func (e Exit) Description() string { return e.description }
 
+type Room struct {
+	key int
+	name, description string
+	exits Set
+}
+
+func (r *Room) NewExit(name string, destination *Room) (e *Exit, err error) {
+	foundExit := r.exits.ContainsWhere(func (o Object) bool {
+		return o.Name() == name
+	})
+
+	if foundExit {
+		err = errors.New("An exit with that name already exists.")
+	} else {
+		e = &Exit{name: name, destination: destination}
+		r.exits.Add(e)
+	}
+
+	return
+}
+
+// Room implements Object interface
+func (r Room) Key() int { return r.key }
+func (r Room) Name() string { return r.name }
+func (r Room) Description() string { return r.description }
+
 type Player struct {
 	key int
 	name, description string
-	conn *Connection
 	location *Room
 }
 
@@ -83,7 +105,7 @@ func NewWorld() *World {
 }
 
 func (w *World) NewRoom(name string) (r *Room, err error) {
-	r = &Room{key: idGen(), name: name}
+	r = &Room{key: idGen(), name: name, exits: NewSet()}
 	w.rooms.Add(r)
 
 	return
@@ -100,56 +122,16 @@ func (w *World) NewPlayer(name string, location *Room) (p *Player, err error) {
 	return
 }
 
-func (w *World) ConnectPlayer(name string, conn net.Conn) (p *Player, err error) {
-
-	player := w.players.SelectFirst(func (o Object) bool {
-		return o.Name() == name
-	})
-
-	if player != nil {
-		p = player.(*Player)
-		p.conn = &Connection{conn}
-	} else {
-		err = errors.New("Player not found")
-	}
-
-	return 
-}
-
-func (w *World) DisconnectPlayer(name string) (p *Player, err error) {
-	player := w.players.SelectFirst(func (o Object) bool {
-		return o.Name() == name
-	})
-
-	if player != nil {
-		p = player.(*Player)
-		p.conn = nil
-	} else {
-		err = errors.New("User not found")
-	}
-
-	return
-}
-
-//
-// Send a message to a player
-//
-func (p *Player) tell(msg string, args ...interface{}) {
-	if p.conn != nil {
-		p.conn.tell(msg, args...)
-	}
-}
-
 //
 // Handle a single client connection loop
 //
 func connectionLoop(conn net.Conn) {
 	linebuf := make([]byte, 1024, 1024)
+	client := NewClient(conn)
 
 	// Loop on input and handle it.
 	for {
-		conn.Write([]byte("mud> "))
-
+		client.tell("mud> ")
 		n, err := conn.Read(linebuf)
 
 		if err != nil {
@@ -160,10 +142,8 @@ func connectionLoop(conn net.Conn) {
 		}
 
 		line := strings.TrimSpace(string(linebuf[:n]))
-
-		debugLog.Println("User said:", line)
-
-		conn.Write([]byte("Huh?\r\n"))
+		debugLog.Println(fmt.Sprintf("[%s]: %s", conn.RemoteAddr(), line))
+		client.tell("Huh?\r\n")
 	}
 
 	infoLog.Println("Disconnection from", conn.RemoteAddr())
@@ -174,6 +154,7 @@ func connectionLoop(conn net.Conn) {
 // Build up the world.
 //
 func initWorld() {
+	connections = NewSet()
 	world = NewWorld()
 }
 
@@ -211,7 +192,7 @@ func main() {
 	go func() {
 		for {
 			conn, err := ln.Accept()
-		
+
 			infoLog.Println("Accepted connection from:", conn.RemoteAddr())
 
 			if err != nil {
