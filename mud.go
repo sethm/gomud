@@ -115,6 +115,7 @@ type Player struct {
 	name, description string
 	location          *Room
 	awake             bool
+	client            *Client
 }
 
 // Player implements Object interface
@@ -249,11 +250,34 @@ func doConnect(world *World, client *Client, args CommandArgs) {
 	// We must use a type assertion to cast Object to type *Player
 	client.player = player.(*Player)
 	client.player.awake = true
+	client.player.client = client
 	client.tell("Welcome, %s!", player.Name())
+
+	here := client.player.location
+	world.tellAllButMe(here, client.player, player.Name() + " has connected.")
+
+}
+
+func (world *World) tellAllButMe(room *Room, me *Player, fmt string, args ...interface{}) {
+
+	players := world.PlayersAt(me.location)
+
+	for _, player := range players {
+		client := player.client
+		if client != nil && client.player != me {
+			client.tell(fmt, args...)
+		}
+	}
+
 }
 
 func doSay(world *World, client *Client, args CommandArgs) {
-	client.tell(client.player.Name() + " says, \"" + args.argString + "\"")
+	client.tell("You say, \"" + args.argString + "\"")
+
+	player := client.player
+	here := player.location
+
+	world.tellAllButMe(here, player, player.Name() + " says, \"" + args.argString + "\"")
 }
 
 func doQuit(world *World, client *Client, args CommandArgs) {
@@ -396,7 +420,10 @@ func connectionLoop(conn net.Conn) {
 
 	infoLog.Println("Disconnection from", conn.RemoteAddr())
 
+	world.tellAllButMe(client.player.location, client.player, client.player.Name() + " has disconnected.")
+
 	client.player.awake = false
+	client.player.client = nil
 	client.player = nil
 
 	conn.Close()
