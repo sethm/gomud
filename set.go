@@ -21,6 +21,17 @@ func NewSet() Set {
 	return Set{make(map[int]Object)}
 }
 
+func (s Set) Iterator() <-chan Object {
+	ch := make(chan Object)
+	go func() {
+		for _, val := range s.container {
+			ch<- val
+		}
+		close(ch)
+	}()
+	return ch
+}
+
 func (s Set) Add(o Object) bool {
 	if s.container[o.Key()] != nil {
 		return false

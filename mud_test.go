@@ -84,7 +84,11 @@ func TestNewWorld(t *testing.T) {
 func TestNewRoom(t *testing.T) {
 	world := NewWorld()
 	hall, err := world.NewRoom("The Hall")
-	if hall == nil || err != nil {	
+
+	if hall.Name() != "The Hall" {
+		t.Errorf("Expected name to be 'The Hall'")
+	}
+	if hall == nil || err != nil {
 		t.Errorf("Expected to create a new room.")
 	}
 	if world.rooms.Len() != 1 || !world.rooms.Contains(hall) {
@@ -96,7 +100,7 @@ func TestNewPlayer(t *testing.T) {
 	world := NewWorld()
 	hall,_ := world.NewRoom("The Hall")
 	bob,_ := world.NewPlayer("bob", hall)
-	if bob.name != "bob" {
+	if bob.Name() != "bob" {
 		t.Errorf("Expected player name to be bob, but was %s", bob.name)
 	}
 	if bob.location != hall {
@@ -119,7 +123,7 @@ func TestNewPlayerCantReuseNames(t *testing.T) {
 
 func TestTell(t *testing.T) {
 	conn := NewMockConn()
-	client := &Client{conn: conn}
+	client := NewClient(conn) // &Client{conn: conn}
 	client.tell("Hello, world!\n")
 
 	actual := string(conn.writtenBytes[0:15])
@@ -133,11 +137,30 @@ func TestNewExit(t *testing.T) {
 	hall,_ := world.NewRoom("The Hall")
 	den,_ := world.NewRoom("The Den")
 
-	_, err1 := hall.NewExit("east", den)
-	_, err2 := den.NewExit("west", hall)
+	east, err1 := world.NewExit(hall, "east", den)
+	west, err2 := world.NewExit(den, "west", hall)
 
+	if east.Name() != "east" {
+		t.Errorf("Expected hall exit to be named 'east'")
+	}
+	if west.Name() != "west" {
+		t.Errorf("Expected hall exit to be named 'east'")
+	}
 	if err1 != nil || err2 != nil {
 		t.Errorf("Error while creating exits.")
+	}
+}
+
+func TestNewExitAddsToWorldSet(t *testing.T) {
+	world := NewWorld()
+	hall,_ := world.NewRoom("The Hall")
+	den,_ := world.NewRoom("The Den")
+
+	world.NewExit(hall, "east", den)
+	world.NewExit(den, "west", hall)
+
+	if world.exits.Len() != 2 {
+		t.Errorf("Exits were not added to the global set:")
 	}
 }
 
@@ -146,10 +169,75 @@ func TestNewExitFailsWhenCreatingDuplicateExits(t *testing.T) {
 	hall,_ := world.NewRoom("The Hall")
 	den,_ := world.NewRoom("The Den")
 
-	hall.NewExit("east", den)
-	exit, err := hall.NewExit("east", hall)
+	world.NewExit(hall, "east", den)
+	exit, err := world.NewExit(hall, "east", hall)
 
 	if exit != nil || err == nil {
 		t.Errorf("Creating exit should have failed.")
 	}
+}
+
+// We cannot use '==' to compare Commands, so we must implement our
+// own equality function.
+func equalCommands(a Command, b Command) bool {
+	if a.verb != b.verb {
+		return false
+	}
+
+	if a.args.argString != b.args.argString {
+		return false
+	}
+
+	if len(a.args.argSlice) != len(b.args.argSlice) {
+		return false
+	}
+
+	for i, arg := range a.args.argSlice {
+		if arg != b.args.argSlice[i] {
+			return false
+		}
+	}
+
+	return true
+}
+
+var commandInputs = []string {
+    "",
+    "look",
+    "walk east",
+	"west", // There's an exit to the west
+	"east", // No such exit
+    "say foo bar baz",
+}
+
+var expectedCommands = []Command {
+    {"", CommandArgs{"", []string{}}},
+    {"look", CommandArgs{"", []string{}}},
+    {"walk", CommandArgs{"east", []string{"east"}}},
+	{"move", CommandArgs{"west", []string{"west"}}},
+	{"east", CommandArgs{"", []string{}}},
+    {"say", CommandArgs{"foo bar baz", []string{"foo", "bar", "baz"}}},
+}
+
+func TestParseCommand(t *testing.T) {
+	conn := NewMockConn()
+	client := NewClient(conn)
+	
+    world := NewWorld()
+
+	bedroom, _ := world.NewRoom("The Bedroom")
+	hall, _ := world.NewRoom("The Hall")
+
+	world.NewExit(bedroom, "west", hall)
+
+	player, _ := world.NewPlayer("bob", bedroom)
+	client.player = player
+
+    for i, cmd := range commandInputs {
+		command := world.parseCommand(client, cmd)
+
+		if !equalCommands(command, expectedCommands[i]) {
+            t.Errorf("%d: Expected args to be equal. Actual: %s", i, command)
+		}
+    }
 }

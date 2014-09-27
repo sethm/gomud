@@ -14,10 +14,26 @@ import (
 
 const PORT = 8888
 
-var world *World
-var connections Set
+var world *World = NewWorld()
+var connections Set = NewSet()
 var debugLog, infoLog, errorLog *log.Logger
 var idGen func() int = KeyGen()
+
+type CommandHandler func(*World, *Client, CommandArgs)
+
+type HandlerMap map[string]CommandHandler
+
+// Create a command handler dispatch map
+var handlers = HandlerMap {
+    "go": doMove,
+    "walk": doMove,
+    "move": doMove,
+    "say": doSay,
+    "emote": doEmote,
+    "look": doLook,
+	"connect": doConnect,
+    "@desc": doDesc,
+}
 
 //
 // Generate unique IDs for objects
@@ -31,7 +47,22 @@ func KeyGen() func() int {
 	}
 }
 
-// Wrapper for net.Conn with some convenience functions
+// Arguments to a command
+type CommandArgs struct {
+    argString string
+    argSlice []string
+}
+
+// A command entered at the MUD's prompt
+type Command struct {
+    verb string
+    args CommandArgs
+}
+
+//
+// Abstraction for a client connection that allows us to tie a user
+// and a connection together.
+//
 type Client struct {
 	conn net.Conn
 	player *Player
@@ -42,10 +73,13 @@ func NewClient(conn net.Conn) *Client {
 }
 
 func (c *Client) tell(msg string, args ...interface{}) {
-	s := fmt.Sprintf(msg, args...)
+	s := fmt.Sprintf(msg + "\r\n", args...)
 	c.conn.Write([]byte(s))
 }
 
+//
+// Exits link two rooms together
+//
 type Exit struct {
 	key int
 	name, description string
@@ -57,25 +91,13 @@ func (e Exit) Key() int { return e.key }
 func (e Exit) Name() string { return e.name }
 func (e Exit) Description() string { return e.description }
 
+//
+// A room is a place in the world.
+//
 type Room struct {
 	key int
 	name, description string
 	exits Set
-}
-
-func (r *Room) NewExit(name string, destination *Room) (e *Exit, err error) {
-	foundExit := r.exits.ContainsWhere(func (o Object) bool {
-		return o.Name() == name
-	})
-
-	if foundExit {
-		err = errors.New("An exit with that name already exists.")
-	} else {
-		e = &Exit{name: name, destination: destination}
-		r.exits.Add(e)
-	}
-
-	return
 }
 
 // Room implements Object interface
@@ -122,6 +144,198 @@ func (w *World) NewPlayer(name string, location *Room) (p *Player, err error) {
 	return
 }
 
+func (w *World) NewExit(source *Room, name string, destination *Room) (e *Exit, err error) {
+	foundExit := source.exits.ContainsWhere(func (o Object) bool {
+		return o.Name() == name
+	})
+
+	if foundExit {
+		err = errors.New("An exit with that name already exists.")
+	} else {
+		e = &Exit{key: idGen(), name: name, destination: destination}
+		w.exits.Add(e)
+		source.exits.Add(e)
+	}
+
+	return
+}
+
+// TODO: I feel like this needs improvement.
+func (w *World) parseCommand(client *Client, line string) Command {
+    // The user may have typed `"foo`, which we want to interpret
+    // as "say foo".
+
+    if strings.HasPrefix(line, "\"") {
+        sayText := line[1:len(line)]
+        return Command{"say", CommandArgs{sayText, strings.Split(sayText, " ")}}
+    } else if strings.HasPrefix(line, ":") {
+        emoteText := line[1:len(line)]
+        return Command{"emote", CommandArgs{emoteText, strings.Split(emoteText, " ")}}
+    } else {
+        tokenized := strings.SplitN(line, " ", 2)
+        if len(tokenized) == 2 {
+            return Command{tokenized[0], CommandArgs{tokenized[1], strings.Split(tokenized[1], " ")}}
+        } else {
+			foundExit := false
+
+			// If the player is connected, do some special magic.
+			if client.player != nil {
+				// The user may have typed an exit name as a command. In that
+				// case, we want to interpret what she's said as a `move`
+				// command
+				location := client.player.location
+
+				for exit := range location.exits.Iterator() {
+					if tokenized[0] == exit.Name() {
+						foundExit = true
+					}
+				}
+			}
+			
+			if foundExit {
+				return Command{"move", CommandArgs{tokenized[0], []string{tokenized[0]}}}
+			} else {
+				return Command{tokenized[0], CommandArgs{"", []string{}}}
+			}
+        }
+    }
+}
+
+
+func (w *World) handleCommand(handlers *HandlerMap, client *Client, command Command) {
+	handler := (*handlers)[command.verb]
+
+	if handler == nil {
+		client.tell("Huh?")
+	} else {
+		handler(w, client, command.args)
+	}
+}
+
+//
+// Handlers
+//
+
+// TODO: Refactor and clean up the 'if client.player' stuff
+
+func doConnect(world *World, client *Client, args CommandArgs) {
+	if client.player != nil {
+		return
+	}
+
+	player := world.players.SelectFirst(func(o Object) bool {
+		infoLog.Println("o.Name()=", o.Name())
+		return o.Name() == args.argString
+	})
+
+	if player == nil {
+		client.tell("No such player!")
+		return
+	}
+
+	p := player.(*Player)
+
+	client.player = p
+	client.tell("Welcome, %s!", p.Name())
+}
+
+func doSay(world *World, client *Client, args CommandArgs) {
+	if client.player == nil {
+		client.tell("You must be connected to do that.")
+		return
+	}
+	
+    client.tell(client.player.Name() + " says, \"" + args.argString + "\"")
+}
+
+func doEmote(world *World, client *Client, args CommandArgs) {
+	if client.player == nil {
+		client.tell("You must be connected to do that.")
+		return
+	}
+
+    client.tell(client.player.name + " " + args.argString)
+}
+
+func doDesc(world *World, client *Client, args CommandArgs) {
+	if client.player == nil {
+		client.tell("You must be connected to do that.")
+		return
+	}
+
+	player := client.player
+    here := player.location
+
+    here.description = args.argString
+
+    client.tell("Set.")
+}
+
+func doMove(world *World, client *Client, args CommandArgs) {
+	if client.player == nil {
+		client.tell("You must be connected to do that.")
+		return
+	}
+
+	player := client.player
+	here := player.location
+
+    // Try to find an exit with the correct name.
+    for exit := range here.exits.Iterator() {
+        if exit.Name() == args.argString {
+            player.location = exit.(*Exit).destination
+            lookHere(client)
+            return
+		}
+    }
+
+    client.tell("There's no exit in that direction!")
+}
+
+func lookHere(client *Client) {
+	player := client.player
+    here := player.location
+    client.tell("You are in: %s", here.name)
+	
+    if here.description != "" {
+        client.tell("\n" + here.description + "\n")
+    }
+	
+    if here.exits.Len() > 0 {
+        client.tell("You can see the following exits:")
+		for exit := range here.exits.Iterator() {
+            client.tell("  %s", exit.Name())
+        }
+    }
+}
+
+func doLook(world *World, client *Client, args CommandArgs) {
+	if client.player == nil {
+		client.tell("You must be connected to do that.")
+		return
+	}
+
+    if args.argString == "" {
+        lookHere(client)
+    } else {
+        // TODO: Refactor when there are objects
+        client.tell("I don't see that here.")
+    }
+}
+
+
+func welcome(client *Client) {
+	client.tell("-----------------------------------------------------")
+	client.tell("Welcome to this experimental MUD!")
+	client.tell("")
+	client.tell("To create a new player: create <player_name>")
+	client.tell("To connect as a player: connect <player_name>")
+	client.tell("To leave the game:      quit")
+	client.tell("-----------------------------------------------------")
+	client.tell("")
+	client.tell("")
+}
+
 //
 // Handle a single client connection loop
 //
@@ -129,9 +343,12 @@ func connectionLoop(conn net.Conn) {
 	linebuf := make([]byte, 1024, 1024)
 	client := NewClient(conn)
 
+	welcome(client)
+
 	// Loop on input and handle it.
 	for {
-		client.tell("mud> ")
+		// // Uncomment if we want a prompt...
+		// client.tell("mud> ")
 		n, err := conn.Read(linebuf)
 
 		if err != nil {
@@ -143,10 +360,15 @@ func connectionLoop(conn net.Conn) {
 
 		line := strings.TrimSpace(string(linebuf[:n]))
 		debugLog.Println(fmt.Sprintf("[%s]: %s", conn.RemoteAddr(), line))
-		client.tell("Huh?\r\n")
+
+		command := world.parseCommand(client, line)
+		world.handleCommand(&handlers, client, command)
 	}
 
 	infoLog.Println("Disconnection from", conn.RemoteAddr())
+
+	client.player = nil
+	
 	conn.Close()
 }
 
@@ -154,8 +376,17 @@ func connectionLoop(conn net.Conn) {
 // Build up the world.
 //
 func initWorld() {
-	connections = NewSet()
-	world = NewWorld()
+	hall, _ := world.NewRoom("Hallway")
+	den, _ := world.NewRoom("The Den")
+	kitchen, _ := world.NewRoom("The Kitchen")
+
+	world.NewExit(hall, "east", den)
+	world.NewExit(den, "west", hall)
+	world.NewExit(den, "south", kitchen)
+	world.NewExit(kitchen, "north", den)
+
+	world.NewPlayer("god", hall)
+	world.NewPlayer("wizard", hall)
 }
 
 //
@@ -188,6 +419,8 @@ func main() {
 	infoLog.Println("Server listening on port", PORT)
 
 	initWorld()
+
+	infoLog.Println("World initialized with", world.rooms.Len(), "room(s) and", world.players.Len(), "player(s)")
 
 	go func() {
 		for {
