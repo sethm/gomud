@@ -124,10 +124,10 @@ func TestNewPlayerCantReuseNames(t *testing.T) {
 func TestTell(t *testing.T) {
 	conn := NewMockConn()
 	client := NewClient(conn) // &Client{conn: conn}
-	client.tell("Hello, world!\n")
+	client.tell("Hello, world!")
 
-	actual := string(conn.writtenBytes[0:15])
-	if actual != "Hello, world!\n\u0000" {
+	actual := string(conn.writtenBytes[0:16])
+	if actual != "Hello, world!\r\n\u0000" {
 		t.Errorf("`tell` did not write bytes correctly: '%s'", actual)
 	}
 }

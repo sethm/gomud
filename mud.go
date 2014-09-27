@@ -23,16 +23,20 @@ type CommandHandler func(*World, *Client, CommandArgs)
 
 type HandlerMap map[string]CommandHandler
 
-// Create a command handler dispatch map
-var handlers = HandlerMap {
+var preAuthHandlers = HandlerMap {
+	"connect": doConnect,
+	"quit": doQuit,
+}
+
+var postAuthHandlers = HandlerMap {
     "go": doMove,
     "walk": doMove,
     "move": doMove,
     "say": doSay,
     "emote": doEmote,
     "look": doLook,
-	"connect": doConnect,
     "@desc": doDesc,
+	"quit": doQuit,
 }
 
 //
@@ -66,10 +70,11 @@ type Command struct {
 type Client struct {
 	conn net.Conn
 	player *Player
+	quitRequested bool
 }
 
 func NewClient(conn net.Conn) *Client {
-	return &Client{conn: conn}
+	return &Client{conn: conn, quitRequested: false}
 }
 
 func (c *Client) tell(msg string, args ...interface{}) {
@@ -202,13 +207,21 @@ func (w *World) parseCommand(client *Client, line string) Command {
 }
 
 
-func (w *World) handleCommand(handlers *HandlerMap, client *Client, command Command) {
-	handler := (*handlers)[command.verb]
+func (w *World) handleCommand(preAuthHandlers *HandlerMap, postAuthHandlers *HandlerMap, client *Client, command Command) {
 
+	if client.player == nil {
+		w.dispatchToHandler((*preAuthHandlers)[command.verb], client, command.args)
+		return
+	}
+
+	w.dispatchToHandler((*postAuthHandlers)[command.verb], client, command.args)
+}
+
+func (w *World) dispatchToHandler(handler CommandHandler, client *Client, args CommandArgs) {
 	if handler == nil {
 		client.tell("Huh?")
 	} else {
-		handler(w, client, command.args)
+		handler(w, client, args)
 	}
 }
 
@@ -240,29 +253,18 @@ func doConnect(world *World, client *Client, args CommandArgs) {
 }
 
 func doSay(world *World, client *Client, args CommandArgs) {
-	if client.player == nil {
-		client.tell("You must be connected to do that.")
-		return
-	}
-	
     client.tell(client.player.Name() + " says, \"" + args.argString + "\"")
 }
 
-func doEmote(world *World, client *Client, args CommandArgs) {
-	if client.player == nil {
-		client.tell("You must be connected to do that.")
-		return
-	}
+func doQuit(world *World, client *Client, args CommandArgs) {
+	client.quitRequested = true
+}
 
+func doEmote(world *World, client *Client, args CommandArgs) {
     client.tell(client.player.name + " " + args.argString)
 }
 
 func doDesc(world *World, client *Client, args CommandArgs) {
-	if client.player == nil {
-		client.tell("You must be connected to do that.")
-		return
-	}
-
 	player := client.player
     here := player.location
 
@@ -272,11 +274,6 @@ func doDesc(world *World, client *Client, args CommandArgs) {
 }
 
 func doMove(world *World, client *Client, args CommandArgs) {
-	if client.player == nil {
-		client.tell("You must be connected to do that.")
-		return
-	}
-
 	player := client.player
 	here := player.location
 
@@ -310,11 +307,6 @@ func lookHere(client *Client) {
 }
 
 func doLook(world *World, client *Client, args CommandArgs) {
-	if client.player == nil {
-		client.tell("You must be connected to do that.")
-		return
-	}
-
     if args.argString == "" {
         lookHere(client)
     } else {
@@ -362,7 +354,11 @@ func connectionLoop(conn net.Conn) {
 		debugLog.Println(fmt.Sprintf("[%s]: %s", conn.RemoteAddr(), line))
 
 		command := world.parseCommand(client, line)
-		world.handleCommand(&handlers, client, command)
+		world.handleCommand(&preAuthHandlers, &postAuthHandlers, client, command)
+
+		if client.quitRequested {
+			break
+		}
 	}
 
 	infoLog.Println("Disconnection from", conn.RemoteAddr())
