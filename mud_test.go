@@ -222,7 +222,7 @@ var expectedCommands = []Command {
 func TestParseCommand(t *testing.T) {
 	conn := NewMockConn()
 	client := NewClient(conn)
-	
+
     world := NewWorld()
 
 	bedroom, _ := world.NewRoom("The Bedroom")
@@ -240,4 +240,49 @@ func TestParseCommand(t *testing.T) {
             t.Errorf("%d: Expected args to be equal. Actual: %s", i, command)
 		}
     }
+}
+
+func TestPlayersCanBeAwakeOrAsleep(t *testing.T) {
+	world := NewWorld()
+	hall, _ := world.NewRoom("The Hall")
+	bob, _ := world.NewPlayer("bob", hall)
+	jim, _ := world.NewPlayer("jim", hall)
+
+	if bob.Awake() || jim.Awake() {
+		t.Errorf("Neither bob nor jim should be awake")
+	}
+
+	bob.awake = true
+
+	if !bob.Awake() || jim.Awake() {
+		t.Errorf("Bob should be awake, jim should not.")
+	}
+
+	jim.awake = true
+
+	if !bob.Awake() || !jim.Awake() {
+		t.Errorf("Bob should and jim should be be awake.")
+	}
+}
+
+func TestConnectingShouldWakeUpPlayers(t *testing.T) {
+	conn := NewMockConn()
+	client := NewClient(conn) // &Client{conn: conn}
+	world := NewWorld()
+	hall, _ := world.NewRoom("The Hall")
+	bob, _ := world.NewPlayer("bob", hall)
+
+	if bob.Awake() {
+		t.Errorf("Bob should not be awake.")
+	}
+
+	doConnect(world, client, CommandArgs{"bob", []string{"bob"}})
+
+	if client.player != bob {
+		t.Errorf("Connecting should have linked the client and the player")
+	}
+
+	if !bob.Awake() {
+		t.Errorf("Connecting should have woken up bob.")
+	}
 }

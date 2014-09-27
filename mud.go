@@ -114,12 +114,14 @@ type Player struct {
 	key int
 	name, description string
 	location *Room
+	awake bool
 }
 
 // Player implements Object interface
 func (p Player) Key() int { return p.key }
 func (p Player) Name() string { return p.name }
 func (p Player) Description() string { return p.description }
+func (p *Player) Awake() bool { return p.awake }
 
 type World struct {
 	players Set
@@ -196,7 +198,7 @@ func (w *World) parseCommand(client *Client, line string) Command {
 					}
 				}
 			}
-			
+
 			if foundExit {
 				return Command{"move", CommandArgs{tokenized[0], []string{tokenized[0]}}}
 			} else {
@@ -237,7 +239,6 @@ func doConnect(world *World, client *Client, args CommandArgs) {
 	}
 
 	player := world.players.SelectFirst(func(o Object) bool {
-		infoLog.Println("o.Name()=", o.Name())
 		return o.Name() == args.argString
 	})
 
@@ -246,10 +247,10 @@ func doConnect(world *World, client *Client, args CommandArgs) {
 		return
 	}
 
-	p := player.(*Player)
-
-	client.player = p
-	client.tell("Welcome, %s!", p.Name())
+	// We must use a type assertion to cast Object to type *Player
+	client.player = player.(*Player)
+	client.player.awake = true
+	client.tell("Welcome, %s!", player.Name())
 }
 
 func doSay(world *World, client *Client, args CommandArgs) {
@@ -281,7 +282,7 @@ func doMove(world *World, client *Client, args CommandArgs) {
     for exit := range here.exits.Iterator() {
         if exit.Name() == args.argString {
             player.location = exit.(*Exit).destination
-            lookHere(client)
+            lookHere(world, client)
             return
 		}
     }
@@ -289,26 +290,60 @@ func doMove(world *World, client *Client, args CommandArgs) {
     client.tell("There's no exit in that direction!")
 }
 
-func lookHere(client *Client) {
+func (w *World) PlayersAt(room *Room) []*Player {
+	// Must use type assertions because the collection is
+	// of type Object, not type *Player. Ugh.
+	objects := world.players.Select(func(o Object) bool {
+		return o.(*Player).location == room
+	})
+
+	players := make([]*Player, len(objects), len(objects))
+	for i, o := range objects {
+		players[i] = o.(*Player)
+	}
+	return players
+}
+
+func lookHere(world *World, client *Client) {
 	player := client.player
     here := player.location
     client.tell("You are in: %s", here.name)
-	
+
     if here.description != "" {
         client.tell("\n" + here.description + "\n")
     }
-	
+
     if here.exits.Len() > 0 {
         client.tell("You can see the following exits:")
 		for exit := range here.exits.Iterator() {
             client.tell("  %s", exit.Name())
         }
     }
+
+	// TODO: Do we want to denormalize this? i.e., we'd have
+	// a circular relationship where a room has a collection of
+	// player pointers, and a player has a room pointer?
+	// Ripe for a refactor.
+	players := world.PlayersAt(here)
+
+	if len(players) > 0 {
+		client.tell("The following players are here:")
+		for _, p := range players {
+			if p.Name() != player.Name() {
+				if p.Awake() {
+					client.tell("  %s", p.Name())
+				} else {
+					client.tell("  %s (asleep)", p.Name())
+				}
+			}
+		}
+	}
+
 }
 
 func doLook(world *World, client *Client, args CommandArgs) {
     if args.argString == "" {
-        lookHere(client)
+        lookHere(world, client)
     } else {
         // TODO: Refactor when there are objects
         client.tell("I don't see that here.")
@@ -363,8 +398,9 @@ func connectionLoop(conn net.Conn) {
 
 	infoLog.Println("Disconnection from", conn.RemoteAddr())
 
+	client.player.awake = false
 	client.player = nil
-	
+
 	conn.Close()
 }
 
