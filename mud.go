@@ -23,20 +23,20 @@ type CommandHandler func(*World, *Client, CommandArgs)
 
 type HandlerMap map[string]CommandHandler
 
-var preAuthHandlers = HandlerMap {
+var preAuthHandlers = HandlerMap{
 	"connect": doConnect,
-	"quit": doQuit,
+	"quit":    doQuit,
 }
 
-var postAuthHandlers = HandlerMap {
-    "go": doMove,
-    "walk": doMove,
-    "move": doMove,
-    "say": doSay,
-    "emote": doEmote,
-    "look": doLook,
-    "@desc": doDesc,
-	"quit": doQuit,
+var postAuthHandlers = HandlerMap{
+	"go":    doMove,
+	"walk":  doMove,
+	"move":  doMove,
+	"say":   doSay,
+	"emote": doEmote,
+	"look":  doLook,
+	"@desc": doDesc,
+	"quit":  doQuit,
 }
 
 //
@@ -53,14 +53,14 @@ func KeyGen() func() int {
 
 // Arguments to a command
 type CommandArgs struct {
-    argString string
-    argSlice []string
+	argString string
+	argSlice  []string
 }
 
 // A command entered at the MUD's prompt
 type Command struct {
-    verb string
-    args CommandArgs
+	verb string
+	args CommandArgs
 }
 
 //
@@ -68,8 +68,8 @@ type Command struct {
 // and a connection together.
 //
 type Client struct {
-	conn net.Conn
-	player *Player
+	conn          net.Conn
+	player        *Player
 	quitRequested bool
 }
 
@@ -78,7 +78,7 @@ func NewClient(conn net.Conn) *Client {
 }
 
 func (c *Client) tell(msg string, args ...interface{}) {
-	s := fmt.Sprintf(msg + "\r\n", args...)
+	s := fmt.Sprintf(msg+"\r\n", args...)
 	c.conn.Write([]byte(s))
 }
 
@@ -86,47 +86,47 @@ func (c *Client) tell(msg string, args ...interface{}) {
 // Exits link two rooms together
 //
 type Exit struct {
-	key int
+	key               int
 	name, description string
-	destination *Room
+	destination       *Room
 }
 
 // Exit implements Object interface
-func (e Exit) Key() int { return e.key }
-func (e Exit) Name() string { return e.name }
+func (e Exit) Key() int            { return e.key }
+func (e Exit) Name() string        { return e.name }
 func (e Exit) Description() string { return e.description }
 
 //
 // A room is a place in the world.
 //
 type Room struct {
-	key int
+	key               int
 	name, description string
-	exits Set
+	exits             Set
 }
 
 // Room implements Object interface
-func (r Room) Key() int { return r.key }
-func (r Room) Name() string { return r.name }
+func (r Room) Key() int            { return r.key }
+func (r Room) Name() string        { return r.name }
 func (r Room) Description() string { return r.description }
 
 type Player struct {
-	key int
+	key               int
 	name, description string
-	location *Room
-	awake bool
+	location          *Room
+	awake             bool
 }
 
 // Player implements Object interface
-func (p Player) Key() int { return p.key }
-func (p Player) Name() string { return p.name }
+func (p Player) Key() int            { return p.key }
+func (p Player) Name() string        { return p.name }
 func (p Player) Description() string { return p.description }
-func (p *Player) Awake() bool { return p.awake }
+func (p *Player) Awake() bool        { return p.awake }
 
 type World struct {
 	players Set
-	rooms Set
-	exits Set
+	rooms   Set
+	exits   Set
 }
 
 func NewWorld() *World {
@@ -141,7 +141,7 @@ func (w *World) NewRoom(name string) (r *Room, err error) {
 }
 
 func (w *World) NewPlayer(name string, location *Room) (p *Player, err error) {
-	if w.players.ContainsWhere(func (o Object) bool {return o.Name() == name}) {
+	if w.players.ContainsWhere(func(o Object) bool { return o.Name() == name }) {
 		err = errors.New("User already exists")
 	} else {
 		p = &Player{key: idGen(), name: name, location: location}
@@ -152,7 +152,7 @@ func (w *World) NewPlayer(name string, location *Room) (p *Player, err error) {
 }
 
 func (w *World) NewExit(source *Room, name string, destination *Room) (e *Exit, err error) {
-	foundExit := source.exits.ContainsWhere(func (o Object) bool {
+	foundExit := source.exits.ContainsWhere(func(o Object) bool {
 		return o.Name() == name
 	})
 
@@ -169,20 +169,20 @@ func (w *World) NewExit(source *Room, name string, destination *Room) (e *Exit, 
 
 // TODO: I feel like this needs improvement.
 func (w *World) parseCommand(client *Client, line string) Command {
-    // The user may have typed `"foo`, which we want to interpret
-    // as "say foo".
+	// The user may have typed `"foo`, which we want to interpret
+	// as "say foo".
 
-    if strings.HasPrefix(line, "\"") {
-        sayText := line[1:len(line)]
-        return Command{"say", CommandArgs{sayText, strings.Split(sayText, " ")}}
-    } else if strings.HasPrefix(line, ":") {
-        emoteText := line[1:len(line)]
-        return Command{"emote", CommandArgs{emoteText, strings.Split(emoteText, " ")}}
-    } else {
-        tokenized := strings.SplitN(line, " ", 2)
-        if len(tokenized) == 2 {
-            return Command{tokenized[0], CommandArgs{tokenized[1], strings.Split(tokenized[1], " ")}}
-        } else {
+	if strings.HasPrefix(line, "\"") {
+		sayText := line[1:len(line)]
+		return Command{"say", CommandArgs{sayText, strings.Split(sayText, " ")}}
+	} else if strings.HasPrefix(line, ":") {
+		emoteText := line[1:len(line)]
+		return Command{"emote", CommandArgs{emoteText, strings.Split(emoteText, " ")}}
+	} else {
+		tokenized := strings.SplitN(line, " ", 2)
+		if len(tokenized) == 2 {
+			return Command{tokenized[0], CommandArgs{tokenized[1], strings.Split(tokenized[1], " ")}}
+		} else {
 			foundExit := false
 
 			// If the player is connected, do some special magic.
@@ -204,10 +204,9 @@ func (w *World) parseCommand(client *Client, line string) Command {
 			} else {
 				return Command{tokenized[0], CommandArgs{"", []string{}}}
 			}
-        }
-    }
+		}
+	}
 }
-
 
 func (w *World) handleCommand(preAuthHandlers *HandlerMap, postAuthHandlers *HandlerMap, client *Client, command Command) {
 
@@ -254,7 +253,7 @@ func doConnect(world *World, client *Client, args CommandArgs) {
 }
 
 func doSay(world *World, client *Client, args CommandArgs) {
-    client.tell(client.player.Name() + " says, \"" + args.argString + "\"")
+	client.tell(client.player.Name() + " says, \"" + args.argString + "\"")
 }
 
 func doQuit(world *World, client *Client, args CommandArgs) {
@@ -262,32 +261,32 @@ func doQuit(world *World, client *Client, args CommandArgs) {
 }
 
 func doEmote(world *World, client *Client, args CommandArgs) {
-    client.tell(client.player.name + " " + args.argString)
+	client.tell(client.player.name + " " + args.argString)
 }
 
 func doDesc(world *World, client *Client, args CommandArgs) {
 	player := client.player
-    here := player.location
+	here := player.location
 
-    here.description = args.argString
+	here.description = args.argString
 
-    client.tell("Set.")
+	client.tell("Set.")
 }
 
 func doMove(world *World, client *Client, args CommandArgs) {
 	player := client.player
 	here := player.location
 
-    // Try to find an exit with the correct name.
-    for exit := range here.exits.Iterator() {
-        if exit.Name() == args.argString {
-            player.location = exit.(*Exit).destination
-            lookHere(world, client)
-            return
+	// Try to find an exit with the correct name.
+	for exit := range here.exits.Iterator() {
+		if exit.Name() == args.argString {
+			player.location = exit.(*Exit).destination
+			lookHere(world, client)
+			return
 		}
-    }
+	}
 
-    client.tell("There's no exit in that direction!")
+	client.tell("There's no exit in that direction!")
 }
 
 func (w *World) PlayersAt(room *Room) []*Player {
@@ -306,19 +305,19 @@ func (w *World) PlayersAt(room *Room) []*Player {
 
 func lookHere(world *World, client *Client) {
 	player := client.player
-    here := player.location
-    client.tell("You are in: %s", here.name)
+	here := player.location
+	client.tell("You are in: %s", here.name)
 
-    if here.description != "" {
-        client.tell("\n" + here.description + "\n")
-    }
+	if here.description != "" {
+		client.tell("\n" + here.description + "\n")
+	}
 
-    if here.exits.Len() > 0 {
-        client.tell("You can see the following exits:")
+	if here.exits.Len() > 0 {
+		client.tell("You can see the following exits:")
 		for exit := range here.exits.Iterator() {
-            client.tell("  %s", exit.Name())
-        }
-    }
+			client.tell("  %s", exit.Name())
+		}
+	}
 
 	// TODO: Do we want to denormalize this? i.e., we'd have
 	// a circular relationship where a room has a collection of
@@ -342,14 +341,13 @@ func lookHere(world *World, client *Client) {
 }
 
 func doLook(world *World, client *Client, args CommandArgs) {
-    if args.argString == "" {
-        lookHere(world, client)
-    } else {
-        // TODO: Refactor when there are objects
-        client.tell("I don't see that here.")
-    }
+	if args.argString == "" {
+		lookHere(world, client)
+	} else {
+		// TODO: Refactor when there are objects
+		client.tell("I don't see that here.")
+	}
 }
-
 
 func welcome(client *Client) {
 	client.tell("-----------------------------------------------------")
@@ -436,7 +434,7 @@ func main() {
 	go func() {
 		<-sigs
 		infoLog.Println("SIGTERM received.")
-		stopRequested<- true
+		stopRequested <- true
 	}()
 
 	infoLog.Println("Starting server...")

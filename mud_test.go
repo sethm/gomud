@@ -1,9 +1,9 @@
 package main
 
 import (
-	"time"
 	"net"
 	"testing"
+	"time"
 )
 
 //
@@ -11,13 +11,13 @@ import (
 //
 
 type MockConn struct {
-	readBytes [][]byte
+	readBytes    [][]byte
 	writtenBytes []byte
 
-	readError *error
+	readError        *error
 	closeAfterWrites int
-	numWrites int
-	writtenBytePtr int
+	numWrites        int
+	writtenBytePtr   int
 }
 
 func (conn MockConn) Read(b []byte) (n int, err error) {
@@ -57,7 +57,7 @@ func (conn MockConn) SetWriteDeadline(t time.Time) error {
 }
 
 func NewMockConn() *MockConn {
-	return &MockConn{readBytes: make([][]byte, 1024, 1024),	writtenBytes: make([]byte, 1024, 1024)}
+	return &MockConn{readBytes: make([][]byte, 1024, 1024), writtenBytes: make([]byte, 1024, 1024)}
 }
 
 func TestKeyGen(t *testing.T) {
@@ -98,8 +98,8 @@ func TestNewRoom(t *testing.T) {
 
 func TestNewPlayer(t *testing.T) {
 	world := NewWorld()
-	hall,_ := world.NewRoom("The Hall")
-	bob,_ := world.NewPlayer("bob", hall)
+	hall, _ := world.NewRoom("The Hall")
+	bob, _ := world.NewPlayer("bob", hall)
 	if bob.Name() != "bob" {
 		t.Errorf("Expected player name to be bob, but was %s", bob.name)
 	}
@@ -113,7 +113,7 @@ func TestNewPlayer(t *testing.T) {
 
 func TestNewPlayerCantReuseNames(t *testing.T) {
 	world := NewWorld()
-	hall,_ := world.NewRoom("The Hall")
+	hall, _ := world.NewRoom("The Hall")
 	world.NewPlayer("bob", hall)
 	otherBob, err := world.NewPlayer("bob", hall)
 	if otherBob != nil || err == nil {
@@ -134,8 +134,8 @@ func TestTell(t *testing.T) {
 
 func TestNewExit(t *testing.T) {
 	world := NewWorld()
-	hall,_ := world.NewRoom("The Hall")
-	den,_ := world.NewRoom("The Den")
+	hall, _ := world.NewRoom("The Hall")
+	den, _ := world.NewRoom("The Den")
 
 	east, err1 := world.NewExit(hall, "east", den)
 	west, err2 := world.NewExit(den, "west", hall)
@@ -153,8 +153,8 @@ func TestNewExit(t *testing.T) {
 
 func TestNewExitAddsToWorldSet(t *testing.T) {
 	world := NewWorld()
-	hall,_ := world.NewRoom("The Hall")
-	den,_ := world.NewRoom("The Den")
+	hall, _ := world.NewRoom("The Hall")
+	den, _ := world.NewRoom("The Den")
 
 	world.NewExit(hall, "east", den)
 	world.NewExit(den, "west", hall)
@@ -166,8 +166,8 @@ func TestNewExitAddsToWorldSet(t *testing.T) {
 
 func TestNewExitFailsWhenCreatingDuplicateExits(t *testing.T) {
 	world := NewWorld()
-	hall,_ := world.NewRoom("The Hall")
-	den,_ := world.NewRoom("The Den")
+	hall, _ := world.NewRoom("The Hall")
+	den, _ := world.NewRoom("The Den")
 
 	world.NewExit(hall, "east", den)
 	exit, err := world.NewExit(hall, "east", hall)
@@ -201,29 +201,29 @@ func equalCommands(a Command, b Command) bool {
 	return true
 }
 
-var commandInputs = []string {
-    "",
-    "look",
-    "walk east",
+var commandInputs = []string{
+	"",
+	"look",
+	"walk east",
 	"west", // There's an exit to the west
 	"east", // No such exit
-    "say foo bar baz",
+	"say foo bar baz",
 }
 
-var expectedCommands = []Command {
-    {"", CommandArgs{"", []string{}}},
-    {"look", CommandArgs{"", []string{}}},
-    {"walk", CommandArgs{"east", []string{"east"}}},
+var expectedCommands = []Command{
+	{"", CommandArgs{"", []string{}}},
+	{"look", CommandArgs{"", []string{}}},
+	{"walk", CommandArgs{"east", []string{"east"}}},
 	{"move", CommandArgs{"west", []string{"west"}}},
 	{"east", CommandArgs{"", []string{}}},
-    {"say", CommandArgs{"foo bar baz", []string{"foo", "bar", "baz"}}},
+	{"say", CommandArgs{"foo bar baz", []string{"foo", "bar", "baz"}}},
 }
 
 func TestParseCommand(t *testing.T) {
 	conn := NewMockConn()
 	client := NewClient(conn)
 
-    world := NewWorld()
+	world := NewWorld()
 
 	bedroom, _ := world.NewRoom("The Bedroom")
 	hall, _ := world.NewRoom("The Hall")
@@ -233,13 +233,13 @@ func TestParseCommand(t *testing.T) {
 	player, _ := world.NewPlayer("bob", bedroom)
 	client.player = player
 
-    for i, cmd := range commandInputs {
+	for i, cmd := range commandInputs {
 		command := world.parseCommand(client, cmd)
 
 		if !equalCommands(command, expectedCommands[i]) {
-            t.Errorf("%d: Expected args to be equal. Actual: %s", i, command)
+			t.Errorf("%d: Expected args to be equal. Actual: %s", i, command)
 		}
-    }
+	}
 }
 
 func TestPlayersCanBeAwakeOrAsleep(t *testing.T) {
