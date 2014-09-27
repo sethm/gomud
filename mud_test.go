@@ -261,7 +261,7 @@ func TestPlayersCanBeAwakeOrAsleep(t *testing.T) {
 	jim.awake = true
 
 	if !bob.Awake() || !jim.Awake() {
-		t.Errorf("Bob should and jim should be be awake.")
+		t.Errorf("Bob and jim should be be awake.")
 	}
 }
 
