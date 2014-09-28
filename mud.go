@@ -9,6 +9,7 @@ import (
 	"net"
 	"os"
 	"os/signal"
+	"strconv"
 	"strings"
 	"sync"
 	"syscall"
@@ -32,16 +33,22 @@ type CommandDesc struct {
 type HandlerMap map[string]CommandDesc
 
 var commandHandlers = HandlerMap{
-	"@desc":   {2, false, true, doDesc},
-	"connect": {2, true, false, doConnect},
-	"emote":   {1, false, true, doEmote},
-	"go":      {1, false, true, doMove},
-	"look":    {1, false, true, doLook},
-	"move":    {1, false, true, doMove},
-	"quit":    {0, true, true, doQuit},
-	"say":     {1, false, true, doSay},
-	"tell":    {2, false, true, doTell},
-	"walk":    {1, false, true, doMove},
+	"@desc":     {2, false, true, doDesc},
+	"@dig":      {2, false, true, doDig},
+	"@help":     {0, false, true, doHelp},
+	"@link":     {2, false, true, doLink},
+	"connect":   {2, true, false, doConnect},
+	"newplayer": {2, true, false, doNewplayer},
+	"emote":     {1, false, true, doEmote},
+	"go":        {1, false, true, doMove},
+	"help":      {0, false, true, doHelp},
+	"look":      {1, false, true, doLook},
+	"l":         {1, false, true, doLook},
+	"move":      {1, false, true, doMove},
+	"quit":      {0, true, true, doQuit},
+	"say":       {1, false, true, doSay},
+	"tell":      {2, false, true, doTell},
+	"walk":      {1, false, true, doMove},
 }
 
 //
@@ -288,6 +295,49 @@ func (w *World) handleCommand(handlerMap *HandlerMap, client *Client, command Co
 // Handlers
 //
 
+func doNewplayer(world *World, client *Client, cmd Command) {
+
+	if cmd.target == "" || cmd.args == "" {
+		client.tell("Try: newplayer <player> <password>")
+		return
+	}
+
+	normalName := strings.ToLower(cmd.target)
+
+	for _, player := range world.players {
+		if player.normalName == normalName {
+			client.tell("Sorry, that name is in use.")
+			return
+		}
+	}
+
+	// Ugh, what a kludge. Need a proper framework for defining
+	// player creation room
+	startingRoom, exists := world.rooms[1]
+	if !exists {
+		client.tell("Sorry, we can't create any players right now.")
+		return
+	}
+
+	player, err := world.NewPlayer(cmd.target, cmd.args, startingRoom)
+
+	if err != nil {
+		client.tell("Sorry, we can't create any players right now.")
+		return
+	}
+
+	world.connectPlayer(client, player)
+}
+
+func (world *World) connectPlayer(client *Client, player *Player) {
+	client.player = player
+	client.player.awake = true
+	client.player.client = client
+	client.tell("Welcome, %s!", player.name)
+	world.lookHere(client)
+	world.tellAllButMe(client.player, player.name+" has connected.")
+}
+
 func doConnect(world *World, client *Client, cmd Command) {
 
 	if cmd.target == "" || cmd.args == "" {
@@ -306,13 +356,7 @@ func doConnect(world *World, client *Client, cmd Command) {
 				return
 			}
 
-			client.player = player
-			client.player.awake = true
-			client.player.client = client
-			client.tell("Welcome, %s!", player.name)
-			world.lookHere(client)
-
-			world.tellAllButMe(client.player, player.name+" has connected.")
+			world.connectPlayer(client, player)
 			return
 		}
 	}
@@ -354,6 +398,55 @@ func doDesc(world *World, client *Client, cmd Command) {
 	client.tell("Set.")
 }
 
+func doDig(world *World, client *Client, cmd Command) {
+	here := client.player.location
+	exitName := cmd.target
+	roomName := cmd.args
+
+	if exitName == "" || roomName == "" {
+		client.tell("Dig what?")
+		return
+	}
+
+	room, err := world.NewRoom(roomName)
+
+	if err != nil {
+		client.tell("You can't do that!")
+		return
+	}
+
+	world.NewExit(here, exitName, room)
+
+	client.tell("Dug.")
+}
+
+func doLink(world *World, client *Client, cmd Command) {
+	here := client.player.location
+	exitName := cmd.target
+
+	if exitName == "" || cmd.args == "" {
+		client.tell("Dig what?")
+		return
+	}
+
+	roomNumber, err := strconv.Atoi(cmd.args)
+	if err != nil {
+		client.tell("I didn't understand that room number.")
+		return
+	}
+
+	room, exists := world.rooms[roomNumber]
+
+	if !exists {
+		client.tell("That destination doesn't exist.")
+		return
+	}
+
+	world.NewExit(here, exitName, room)
+
+	client.tell("Linked.")
+}
+
 func doTell(world *World, client *Client, cmd Command) {
 	client.tell("Not Implemented Yet.")
 }
@@ -374,10 +467,24 @@ func doMove(world *World, client *Client, cmd Command) {
 	client.tell("There's no exit in that direction!")
 }
 
+func doHelp(world *World, client *Client, cmd Command) {
+	client.tell("Welcome to this experimental MUD!")
+	client.tell("")
+	client.tell("Basic commands are:")
+	client.tell("   go <exit>                   Move to a new room")
+	client.tell("   <direction>                 Move to a new room")
+	client.tell("   @dig <exit> <name>          Dig a new room")
+	client.tell("   @link <exit> <room_number>  Create a new exit to room #")
+	client.tell("   quit                        Leave the game")
+	client.tell("")
+	client.tell("")
+
+}
+
 func (world *World) lookHere(client *Client) {
 	player := client.player
 	here := player.location
-	client.tell("%s", here.name)
+	client.tell("%s (#%d)", here.name, here.key)
 
 	if here.description != "" {
 		client.tell("\n" + here.description + "\n")
@@ -390,7 +497,7 @@ func (world *World) lookHere(client *Client) {
 		}
 	}
 
-	if len(here.players) > 0 {
+	if len(here.players) > 1 {
 		client.tell("The following players are here:")
 		for _, p := range here.players {
 			if p.normalName != player.normalName {
@@ -423,7 +530,7 @@ func welcome(client *Client) {
 	client.tell("-----------------------------------------------------")
 	client.tell("Welcome to this experimental MUD!")
 	client.tell("")
-	client.tell("To create a new player: create <name> <password>")
+	client.tell("To create a new player: newplayer <name> <password>")
 	client.tell("To connect as a player: connect <name> <password>")
 	client.tell("To leave the game:      quit")
 	client.tell("-----------------------------------------------------")

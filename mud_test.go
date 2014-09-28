@@ -371,7 +371,7 @@ func TestDoConnectWithoutPasswordFAils(t *testing.T) {
 
 func TestDoConnectWithWrongPasswordFAils(t *testing.T) {
 	conn := NewMockConn()
-	client := NewClient(conn) // &Client{conn: conn}
+	client := NewClient(conn)
 	world := NewWorld()
 	hall, _ := world.NewRoom("The Hall")
 	bob, _ := world.NewPlayer("bob", "foo", hall)
