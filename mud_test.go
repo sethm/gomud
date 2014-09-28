@@ -224,19 +224,19 @@ func TestPlayersCanBeAwakeOrAsleep(t *testing.T) {
 	bob, _ := world.NewPlayer("bob", hall)
 	jim, _ := world.NewPlayer("jim", hall)
 
-	if bob.Awake() || jim.Awake() {
+	if bob.awake || jim.awake {
 		t.Errorf("Neither bob nor jim should be awake")
 	}
 
 	bob.awake = true
 
-	if !bob.Awake() || jim.Awake() {
+	if !bob.awake || jim.awake {
 		t.Errorf("Bob should be awake, jim should not.")
 	}
 
 	jim.awake = true
 
-	if !bob.Awake() || !jim.Awake() {
+	if !bob.awake || !jim.awake {
 		t.Errorf("Bob and jim should be be awake.")
 	}
 }
@@ -248,7 +248,7 @@ func TestConnectingShouldWakeUpPlayers(t *testing.T) {
 	hall, _ := world.NewRoom("The Hall")
 	bob, _ := world.NewPlayer("bob", hall)
 
-	if bob.Awake() {
+	if bob.awake {
 		t.Errorf("Bob should not be awake.")
 	}
 
@@ -258,7 +258,7 @@ func TestConnectingShouldWakeUpPlayers(t *testing.T) {
 		t.Errorf("Connecting should have linked the client and the player")
 	}
 
-	if !bob.Awake() {
+	if !bob.awake {
 		t.Errorf("Connecting should have woken up bob.")
 	}
 }

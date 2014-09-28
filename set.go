@@ -42,7 +42,8 @@ func (s Set) Add(o Object) bool {
 }
 
 func (s Set) Contains(o Object) bool {	
-	return s.container[o.Key()] != nil
+	_, exists := s.container[o.Key()]
+	return exists
 }
 
 func (s Set) Remove(o Object) {
@@ -50,15 +51,16 @@ func (s Set) Remove(o Object) {
 }
 
 func (s Set) Select(f Selector) []Object {
-
 	l := list.New()
-	
+
+	// Build a list of selected objects
 	for _,v := range s.container {
 		if f(v) {
 			l.PushBack(v)
 		}
 	}
 
+	// Convert the list into an array.
 	arr := make([]Object, l.Len(), l.Len())
 	i := 0
 	
@@ -70,13 +72,14 @@ func (s Set) Select(f Selector) []Object {
 	return arr
 }
 
-func (s Set) SelectFirst(f Selector) Object {
-	selected := s.Select(f)
-	if len(selected) > 0 {
-		return selected[0]
-	} else {
-		return nil
+func (s Set) SelectOne(f Selector) Object {
+	for _,v := range s.container {
+		if f(v) {
+			return v
+		}
 	}
+
+	return nil
 }
 
 func (s Set) ContainsWhere(f Selector) bool {

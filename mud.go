@@ -128,7 +128,6 @@ type Player struct {
 func (p Player) Key() int            { return p.key }
 func (p Player) Name() string        { return p.name }
 func (p Player) Description() string { return p.description }
-func (p *Player) Awake() bool        { return p.awake }
 
 type World struct {
 	players Set
@@ -241,7 +240,7 @@ func doConnect(world *World, client *Client, cmd Command) {
 		return
 	}
 
-	player := world.players.SelectFirst(func(o Object) bool {
+	player := world.players.SelectOne(func(o Object) bool {
 		return o.Name() == cmd.args
 	})
 
@@ -348,7 +347,7 @@ func lookHere(world *World, client *Client) {
 		client.tell("The following players are here:")
 		for _, p := range players {
 			if p.Name() != player.Name() {
-				if p.Awake() {
+				if p.awake {
 					client.tell("  %s", p.Name())
 				} else {
 					client.tell("  %s (asleep)", p.Name())

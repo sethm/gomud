@@ -85,7 +85,7 @@ func TestRemoveRemovesItem(t *testing.T) {
 	s.Remove(&TestObject{2, "jane", "Jane was never in the set."})
 }
 
-func TestSelectFirst(t *testing.T) {
+func TestSelectOne(t *testing.T) {
 	s := NewSet()
 
 	bob := &TestObject{0, "bob", "Bob is tall."}
@@ -113,10 +113,10 @@ func TestSelectFirst(t *testing.T) {
 		return match
 	}
 
-	i := s.SelectFirst(bobSelector)
-	j := s.SelectFirst(billSelector)
-	k := s.SelectFirst(georgeSelector)
-	l := s.SelectFirst(tallSelector)
+	i := s.SelectOne(bobSelector)
+	j := s.SelectOne(billSelector)
+	k := s.SelectOne(georgeSelector)
+	l := s.SelectOne(tallSelector)
 
 	if i != bob {
 		t.Errorf("Should have selected Bob")
