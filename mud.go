@@ -186,49 +186,51 @@ func (w *World) parseCommand(client *Client, line string) Command {
 	// as "say foo".
 	if strings.HasPrefix(line, "\"") {
 		return Command{verb: "say", args: line[1:len(line)]}
-	} else if strings.HasPrefix(line, ":") {
-		return Command{verb: "emote", args: line[1:len(line)]}
-	} else {
-		tokenized := strings.SplitN(line, " ", 2)
-
-		if len(tokenized) == 0 {
-			return Command{}
-		}
-
-		verb := tokenized[0]
-		info, isKeyword := registeredCommands[verb]
-
-		// See if we should treat the verb as an exit direction
-		if !isKeyword && client.player != nil {
-			location := client.player.location	
-			for _, exit := range location.exits {
-				if tokenized[0] == exit.name {
-					return Command{verb: "move", args: tokenized[0]}
-				}
-			}
-		}
-		
-		if len(tokenized) == 1 {
-			return Command{verb: verb}
-		}
-
-		if info.argCount == 2 {
-			// Further tokenize the args into target/args
-			argTokens := strings.SplitN(tokenized[1], " ", 2)
-
-			if len(argTokens) == 1 {
-				return Command{verb: verb, target: argTokens[0]}
-			}
-
-			return Command{verb: verb, target: argTokens[0], args: argTokens[1]}
-		}
-
-		return Command{verb: verb, args: tokenized[1]}
 	}
+
+	if strings.HasPrefix(line, ":") {
+		return Command{verb: "emote", args: line[1:len(line)]}
+	}
+
+	tokenized := strings.SplitN(line, " ", 2)
+
+	if len(tokenized) == 0 {
+		return Command{}
+	}
+
+	verb := tokenized[0]
+	info, isKeyword := registeredCommands[verb]
+
+	// See if we should treat the verb as an exit direction
+	if !isKeyword && client.player != nil {
+		location := client.player.location
+		for _, exit := range location.exits {
+			if tokenized[0] == exit.name {
+				return Command{verb: "move", args: tokenized[0]}
+			}
+		}
+	}
+
+	if len(tokenized) == 1 {
+		return Command{verb: verb}
+	}
+
+	if info.argCount == 2 {
+		// Further tokenize the args into target/args
+		argTokens := strings.SplitN(tokenized[1], " ", 2)
+
+		if len(argTokens) == 1 {
+			return Command{verb: verb, target: argTokens[0]}
+		}
+
+		return Command{verb: verb, target: argTokens[0], args: argTokens[1]}
+	}
+
+	return Command{verb: verb, args: tokenized[1]}
 }
 
 func (w *World) handleCommand(handlerMap *HandlerMap, client *Client, command Command) {
-	
+
 	description, exists := (*handlerMap)[command.verb]
 
 	if !exists {
