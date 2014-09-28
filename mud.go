@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/signal"
 	"strings"
+	"sync"
 	"syscall"
 )
 
@@ -67,6 +68,7 @@ type Command struct {
 // and a connection together.
 //
 type Client struct {
+	sync.RWMutex
 	conn          net.Conn
 	player        *Player
 	quitRequested bool
@@ -76,6 +78,7 @@ type Client struct {
 // Exits link two rooms together
 //
 type Exit struct {
+	sync.RWMutex
 	key         int
 	name        string
 	normalName  string
@@ -88,6 +91,7 @@ type Exit struct {
 // A room is a place in the world.
 //
 type Room struct {
+	sync.RWMutex
 	key         int
 	name        string
 	description string
@@ -100,6 +104,7 @@ type Room struct {
 // A player interacts with the world
 //
 type Player struct {
+	sync.RWMutex
 	key         int
 	name        string
 	password    [64]byte
@@ -114,7 +119,7 @@ func (p *Player) Description() string {
 	if p.description == "" {
 		return "You see nothing special."
 	}
-	
+
 	return p.description
 }
 
@@ -170,13 +175,28 @@ func (w *World) NewPlayer(name string, password string, location *Room) (p *Play
 
 // Move a player to a new room. Returns the player's new location,
 // and an error if the player could not be moved.
-func (w *World) MovePlayer(p *Player, destination *Room) (r *Room, err error) {
+func (w *World) MovePlayer(p *Player, destination *Room) (*Room, error) {
+	p.Lock()
+	defer p.Unlock()
+
+	destination.Lock()
+	defer destination.Unlock()
+
 	oldRoom := p.location
+
 	if oldRoom != nil {
+		oldRoom.Lock()
+		defer oldRoom.Unlock()
+
 		delete(oldRoom.players, p.key)
 	}
+
 	p.location = destination
 	destination.players[p.key] = p
+
+	// Error may become non-nil in the future, when exits and rooms
+	// have guards / locks
+
 	return destination, nil
 }
 
@@ -241,7 +261,6 @@ func (w *World) parseCommand(client *Client, line string) Command {
 }
 
 func (w *World) handleCommand(handlerMap *HandlerMap, client *Client, command Command) {
-
 	description, exists := (*handlerMap)[command.verb]
 
 	if !exists {
@@ -275,7 +294,7 @@ func doConnect(world *World, client *Client, cmd Command) {
 		client.tell("Try: connect <player> <password>")
 		return
 	}
-	
+
 	normalName := strings.ToLower(cmd.target)
 	passwordHash := sha512.Sum512([]byte(cmd.args))
 
@@ -286,7 +305,7 @@ func doConnect(world *World, client *Client, cmd Command) {
 				client.tell("Incorrect password.")
 				return
 			}
-			
+
 			client.player = player
 			client.player.awake = true
 			client.player.client = client
@@ -324,7 +343,7 @@ func doQuit(world *World, client *Client, cmd Command) {
 
 func doEmote(world *World, client *Client, cmd Command) {
 	player := client.player
-	client.tell(player.name+" "+cmd.args)
+	client.tell(player.name + " " + cmd.args)
 	world.tellAllButMe(player, player.name+" "+cmd.args)
 }
 
