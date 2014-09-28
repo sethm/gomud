@@ -91,7 +91,7 @@ func TestNewRoom(t *testing.T) {
 	if hall == nil || err != nil {
 		t.Errorf("Expected to create a new room.")
 	}
-	if _, hasHall := world.rooms[hall.key] ; len(world.rooms) != 1 || !hasHall {
+	if _, hasHall := world.rooms[hall.key]; len(world.rooms) != 1 || !hasHall {
 		t.Errorf("Expected room to have been added to the world.")
 	}
 }

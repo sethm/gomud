@@ -82,31 +82,35 @@ type Client struct {
 // Exits link two rooms together
 //
 type Exit struct {
-	key               int
-	name, description string
-	destination       *Room
+	key         int
+	name        string
+	normalName  string
+	description string
+	destination *Room
 }
 
 //
 // A room is a place in the world.
 //
 type Room struct {
-	key               int
-	name, description string
-	exits             map[int]*Exit
-	players           map[int]*Player
+	key         int
+	name        string
+	description string
+	exits       map[int]*Exit
+	players     map[int]*Player
 }
 
 //
 // A player interacts with the world
 //
 type Player struct {
-	key               int
-	name, description string
-	normalName        string
-	location          *Room
-	awake             bool
-	client            *Client
+	key         int
+	name        string
+	description string
+	normalName  string
+	location    *Room
+	awake       bool
+	client      *Client
 }
 
 //
@@ -139,7 +143,7 @@ func (c *Client) tell(msg string, args ...interface{}) {
 
 func (w *World) NewPlayer(name string, location *Room) (p *Player, err error) {
 	normalName := strings.ToLower(name)
-	
+
 	for _, player := range w.players {
 		if player.normalName == normalName {
 			err = errors.New("User already exists")
@@ -158,7 +162,9 @@ func (w *World) NewPlayer(name string, location *Room) (p *Player, err error) {
 // and an error if the player could not be moved.
 func (w *World) MovePlayer(p *Player, destination *Room) (r *Room, err error) {
 	oldRoom := p.location
-	if oldRoom != nil { delete(oldRoom.players, p.key) }
+	if oldRoom != nil {
+		delete(oldRoom.players, p.key)
+	}
 	p.location = destination
 	destination.players[p.key] = p
 	return destination, nil
@@ -246,8 +252,8 @@ func doConnect(world *World, client *Client, cmd Command) {
 			client.player.awake = true
 			client.player.client = client
 			client.tell("Welcome, %s!", player.name)
-			
-			world.tellAllButMe(client.player, player.name + " has connected.")
+
+			world.tellAllButMe(client.player, player.name+" has connected.")
 			return
 		}
 	}
@@ -269,7 +275,7 @@ func (world *World) tellAllButMe(me *Player, fmt string, args ...interface{}) {
 func doSay(world *World, client *Client, cmd Command) {
 	client.tell("You say, \"" + cmd.args + "\"")
 	player := client.player
-	world.tellAllButMe(player, player.name + " says, \"" + cmd.args + "\"")
+	world.tellAllButMe(player, player.name+" says, \""+cmd.args+"\"")
 }
 
 func doQuit(world *World, client *Client, cmd Command) {
@@ -389,7 +395,7 @@ func connectionLoop(conn net.Conn) {
 
 	infoLog.Println("Disconnection from", conn.RemoteAddr())
 
-	world.tellAllButMe(client.player, client.player.name + " has disconnected.")
+	world.tellAllButMe(client.player, client.player.name+" has disconnected.")
 
 	client.player.awake = false
 	client.player.client = nil
