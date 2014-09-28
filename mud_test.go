@@ -76,7 +76,7 @@ func TestKeyGen(t *testing.T) {
 func TestNewWorld(t *testing.T) {
 	w := NewWorld()
 
-	if w.players.Len() != 0 {
+	if len(w.players) != 0 {
 		t.Errorf("Expected world to exist and have 0 players.")
 	}
 }
@@ -106,7 +106,7 @@ func TestNewPlayer(t *testing.T) {
 	if bob.location != hall {
 		t.Errorf("Expected player's location to be the hall")
 	}
-	if world.players.Len() != 1 || !world.players.Contains(bob) {
+	if _, containsBob := world.players[bob.key]; len(world.players) != 1 || !containsBob {
 		t.Errorf("Expected player to have been added to world.")
 	}
 
@@ -126,7 +126,7 @@ func TestNewPlayerCantReuseNames(t *testing.T) {
 	world.NewPlayer("bob", hall)
 	otherBob, err := world.NewPlayer("bob", hall)
 	if otherBob != nil || err == nil {
-		t.Errorf("Should not have been able to create duplicate user")
+		t.Errorf("Should not have been able to create duplicate user.")
 	}
 }
 

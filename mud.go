@@ -15,7 +15,6 @@ import (
 const PORT = 8888
 
 var world *World = NewWorld()
-var connections Set = NewSet()
 var debugLog, infoLog, errorLog *log.Logger
 var idGen func() int = KeyGen()
 
@@ -132,13 +131,13 @@ func (p Player) Name() string        { return p.name }
 func (p Player) Description() string { return p.description }
 
 type World struct {
-	players Set
+	players map[int]*Player
 	rooms   map[int]*Room
 	exits   map[int]*Exit
 }
 
 func NewWorld() *World {
-	return &World{NewSet(), make(map[int]*Room), make(map[int]*Exit)}
+	return &World{make(map[int]*Player), make(map[int]*Room), make(map[int]*Exit)}
 }
 
 func (w *World) NewRoom(name string) (r *Room, err error) {
@@ -158,20 +157,24 @@ func (w *World) MovePlayer(p *Player, destination *Room) (r *Room, err error) {
 }
 
 func (w *World) NewPlayer(name string, location *Room) (p *Player, err error) {
-	if w.players.ContainsWhere(func(o Object) bool { return o.Name() == name }) {
-		err = errors.New("User already exists")
-	} else {
-		p = &Player{key: idGen(), name: name, normalName: strings.ToLower(name)}
-		w.players.Add(p)
-		w.MovePlayer(p, location)
+
+	normalName := strings.ToLower(name)
+	
+	for _, player := range w.players {
+		if player.normalName == normalName {
+			err = errors.New("User already exists")
+			return
+		}
 	}
+
+	p = &Player{key: idGen(), name: name, normalName: normalName}
+	w.players[p.key] = p
+	w.MovePlayer(p, location)
 
 	return
 }
 
 func (w *World) NewExit(source *Room, name string, destination *Room) (e *Exit, err error) {
-
-
 	for _, exit := range source.exits {
 		if exit.name == name {
 			err = errors.New("An exit with that name already exists.")
@@ -240,36 +243,32 @@ func (w *World) dispatchToHandler(handler CommandHandler, client *Client, cmd Co
 // Handlers
 //
 
-// TODO: Refactor and clean up the 'if client.player' stuff
-
 func doConnect(world *World, client *Client, cmd Command) {
 	if client.player != nil {
 		return
 	}
 
-	player := world.players.SelectOne(func(o Object) bool {
-		return o.Name() == cmd.args
-	})
+	normalName := strings.ToLower(cmd.args)
 
-	if player == nil {
-		client.tell("No such player!")
-		return
+	for _, player := range world.players {
+		if player.normalName == normalName {
+			client.player = player
+			client.player.awake = true
+			client.player.client = client
+			client.tell("Welcome, %s!", player.name)
+			
+			world.tellAllButMe(client.player, player.name + " has connected.")
+			return
+		}
 	}
 
-	// We must use a type assertion to cast Object to type *Player
-	client.player = player.(*Player)
-	client.player.awake = true
-	client.player.client = client
-	client.tell("Welcome, %s!", player.Name())
-
-	world.tellAllButMe(client.player, player.Name() + " has connected.")
+	client.tell("No such player!")
+	return
 
 }
 
 func (world *World) tellAllButMe(me *Player, fmt string, args ...interface{}) {
-	players := world.PlayersAt(me.location)
-
-	for _, player := range players {
+	for _, player := range me.location.players {
 		client := player.client
 		if client != nil && client.player != me {
 			client.tell(fmt, args...)
@@ -314,20 +313,6 @@ func doMove(world *World, client *Client, cmd Command) {
 	client.tell("There's no exit in that direction!")
 }
 
-func (w *World) PlayersAt(room *Room) []*Player {
-	// Must use type assertions because the collection is
-	// of type Object, not type *Player. Ugh.
-	objects := world.players.Select(func(o Object) bool {
-		return o.(*Player).location == room
-	})
-
-	players := make([]*Player, len(objects), len(objects))
-	for i, o := range objects {
-		players[i] = o.(*Player)
-	}
-	return players
-}
-
 func lookHere(world *World, client *Client) {
 	player := client.player
 	here := player.location
@@ -344,25 +329,18 @@ func lookHere(world *World, client *Client) {
 		}
 	}
 
-	// TODO: Do we want to denormalize this? i.e., we'd have
-	// a circular relationship where a room has a collection of
-	// player pointers, and a player has a room pointer?
-	// Ripe for a refactor.
-	players := world.PlayersAt(here)
-
-	if len(players) > 0 {
+	if len(here.players) > 0 {
 		client.tell("The following players are here:")
-		for _, p := range players {
-			if p.Name() != player.Name() {
+		for _, p := range here.players {
+			if p.normalName != player.normalName {
 				if p.awake {
-					client.tell("  %s", p.Name())
+					client.tell("  %s", p.name)
 				} else {
-					client.tell("  %s (asleep)", p.Name())
+					client.tell("  %s (asleep)", p.name)
 				}
 			}
 		}
 	}
-
 }
 
 func doLook(world *World, client *Client, cmd Command) {
@@ -443,8 +421,8 @@ func initWorld() {
 	world.NewExit(den, "south", kitchen)
 	world.NewExit(kitchen, "north", den)
 
-	world.NewPlayer("god", hall)
-	world.NewPlayer("wizard", hall)
+	world.NewPlayer("God", hall)
+	world.NewPlayer("Wizard", hall)
 }
 
 //
@@ -478,7 +456,10 @@ func main() {
 
 	initWorld()
 
-	infoLog.Println("World initialized with", len(world.rooms), "room(s) and", world.players.Len(), "player(s)")
+	infoLog.Println("World initialized with",
+		len(world.rooms), "room(s),",
+		len(world.players), "player(s), and",
+		len(world.exits), "exit(s)")
 
 	go func() {
 		for {
