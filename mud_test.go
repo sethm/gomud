@@ -114,7 +114,7 @@ func TestNewRoom(t *testing.T) {
 func TestNewPlayer(t *testing.T) {
 	world := NewWorld()
 	hall, _ := world.NewRoom("The Hall")
-	bob, _ := world.NewPlayer("bob", hall)
+	bob, _ := world.NewPlayer("bob", "foo", hall)
 	if bob.name != "bob" {
 		t.Errorf("Expected player name to be bob, but was %s", bob.name)
 	}
@@ -126,7 +126,7 @@ func TestNewPlayer(t *testing.T) {
 	}
 
 	// Should store a normalized name
-	jim, _ := world.NewPlayer("JiM", hall)
+	jim, _ := world.NewPlayer("JiM", "foo", hall)
 	if jim.name != "JiM" {
 		t.Errorf("Expected jim's display name to be 'JiM'")
 	}
@@ -138,8 +138,8 @@ func TestNewPlayer(t *testing.T) {
 func TestNewPlayerCantReuseNames(t *testing.T) {
 	world := NewWorld()
 	hall, _ := world.NewRoom("The Hall")
-	world.NewPlayer("bob", hall)
-	otherBob, err := world.NewPlayer("bob", hall)
+	world.NewPlayer("bob", "foo", hall)
+	otherBob, err := world.NewPlayer("bob", "foo", hall)
 	if otherBob != nil || err == nil {
 		t.Errorf("Should not have been able to create duplicate user.")
 	}
@@ -243,7 +243,7 @@ func TestParseCommand(t *testing.T) {
 	world.NewExit(bedroom, "west", hall)
 	world.NewExit(bedroom, "say", den)    // Trying to be sneaky!
 
-	player, _ := world.NewPlayer("bob", bedroom)
+	player, _ := world.NewPlayer("bob", "foo", bedroom)
 	client.player = player
 
 	for i, cmd := range commandInputs {
@@ -258,8 +258,8 @@ func TestParseCommand(t *testing.T) {
 func TestPlayersCanBeAwakeOrAsleep(t *testing.T) {
 	world := NewWorld()
 	hall, _ := world.NewRoom("The Hall")
-	bob, _ := world.NewPlayer("bob", hall)
-	jim, _ := world.NewPlayer("jim", hall)
+	bob, _ := world.NewPlayer("bob", "foo", hall)
+	jim, _ := world.NewPlayer("jim", "foo", hall)
 
 	if bob.awake || jim.awake {
 		t.Errorf("Neither bob nor jim should be awake")
@@ -283,7 +283,7 @@ func TestMovePlayer(t *testing.T) {
 	world := NewWorld()
 	hall, _ := world.NewRoom("The Hall")
 	den, _ := world.NewRoom("The Den")
-	bob, _ := world.NewPlayer("bob", hall)
+	bob, _ := world.NewPlayer("bob", "foo", hall)
 
 	// Old room has bob in it
 	if bob.location != hall {
@@ -320,13 +320,13 @@ func TestDoConnectShouldWakeUpPlayers(t *testing.T) {
 	client := NewClient(conn) // &Client{conn: conn}
 	world := NewWorld()
 	hall, _ := world.NewRoom("The Hall")
-	bob, _ := world.NewPlayer("bob", hall)
+	bob, _ := world.NewPlayer("bob", "foo", hall)
 
 	if bob.awake {
 		t.Errorf("Bob should not be awake.")
 	}
 
-	doConnect(world, client, Command{"connect", "", "bob"})
+	doConnect(world, client, Command{"connect", "bob", "foo"})
 
 	if client.player != bob {
 		t.Errorf("Connecting should have linked the client and the player")
@@ -342,11 +342,59 @@ func TestDoConnectDoesNothingIfPlayerNotFound(t *testing.T) {
 	client := NewClient(conn) // &Client{conn: conn}
 	world := NewWorld()
 	hall, _ := world.NewRoom("The Hall")
-	bob, _ := world.NewPlayer("bob", hall)
+	bob, _ := world.NewPlayer("bob", "foo", hall)
 
-	doConnect(world, client, Command{"connect", "", "jim"})
+	doConnect(world, client, Command{"connect", "jim", "foo"})
 
 	assertMatch(t, "No such player!\r\n", conn.String())
+
+	if bob.awake {
+		t.Errorf("Bob should still be asleep.")
+	}
+}
+
+func TestDoConnectWithoutPasswordFAils(t *testing.T) {
+	conn := NewMockConn()
+	client := NewClient(conn) // &Client{conn: conn}
+	world := NewWorld()
+	hall, _ := world.NewRoom("The Hall")
+	bob, _ := world.NewPlayer("bob", "foo", hall)
+
+	doConnect(world, client, Command{"connect", "bob", ""})
+
+	assertMatch(t, "Try: connect <player> <password>\r\n", conn.String())
+
+	if bob.awake {
+		t.Errorf("Bob should still be asleep.")
+	}
+}
+
+func TestDoConnectWithWrongPasswordFAils(t *testing.T) {
+	conn := NewMockConn()
+	client := NewClient(conn) // &Client{conn: conn}
+	world := NewWorld()
+	hall, _ := world.NewRoom("The Hall")
+	bob, _ := world.NewPlayer("bob", "foo", hall)
+
+	doConnect(world, client, Command{"connect", "bob", "bar"})
+
+	assertMatch(t, "Incorrect password.\r\n", conn.String())
+
+	if bob.awake {
+		t.Errorf("Bob should still be asleep.")
+	}
+}
+
+func TestDoConnectWithoutUserFails(t *testing.T) {
+	conn := NewMockConn()
+	client := NewClient(conn) // &Client{conn: conn}
+	world := NewWorld()
+	hall, _ := world.NewRoom("The Hall")
+	bob, _ := world.NewPlayer("bob", "foo", hall)
+
+	doConnect(world, client, Command{"connect", "", ""})
+
+	assertMatch(t, "Try: connect <player> <password>\r\n", conn.String())
 
 	if bob.awake {
 		t.Errorf("Bob should still be asleep.")
@@ -363,11 +411,11 @@ func TestDoSay(t *testing.T) {
 	
 	hall, _ := world.NewRoom("The Hall")
 
-	world.NewPlayer("bob", hall)
-	world.NewPlayer("jim", hall)
+	world.NewPlayer("bob", "foo", hall)
+	world.NewPlayer("jim", "foo", hall)
 
-	doConnect(world, bobClient, Command{"connect", "", "bob"})
-	doConnect(world, jimClient, Command{"connect", "", "jim"})
+	doConnect(world, bobClient, Command{"connect", "bob", "foo"})
+	doConnect(world, jimClient, Command{"connect", "jim", "foo"})
 
 	doSay(world, bobClient, Command{"say", "", "Testing 1 2 3"})
 
@@ -385,11 +433,11 @@ func TestDoEmote(t *testing.T) {
 	
 	hall, _ := world.NewRoom("The Hall")
 
-	world.NewPlayer("bob", hall)
-	world.NewPlayer("jim", hall)
+	world.NewPlayer("bob", "foo", hall)
+	world.NewPlayer("jim", "foo", hall)
 
-	doConnect(world, bobClient, Command{"connect", "", "bob"})
-	doConnect(world, jimClient, Command{"connect", "", "jim"})
+	doConnect(world, bobClient, Command{"connect", "bob", "foo"})
+	doConnect(world, jimClient, Command{"connect", "jim", "foo"})
 
 	doEmote(world, bobClient, Command{"emote", "", "tests."})
 
@@ -432,12 +480,12 @@ func TestDoLookShowsHereByDefault(t *testing.T) {
 	
 	world.NewRoom("The Den")
 	
-	world.NewPlayer("bob", hall)
-	world.NewPlayer("jim", hall)
-	world.NewPlayer("sally", hall)
+	world.NewPlayer("bob", "foo", hall)
+	world.NewPlayer("jim", "foo", hall)
+	world.NewPlayer("sally", "foo", hall)
 
-	doConnect(world, bobClient, Command{"connect", "", "bob"})
-	doConnect(world, sallyClient, Command{"connect", "", "sally"})
+	doConnect(world, bobClient, Command{"connect", "bob", "foo"})
+	doConnect(world, sallyClient, Command{"connect", "sally", "foo"})
 
 	doLook(world, bobClient, Command{"look", "", ""})
 
@@ -453,3 +501,5 @@ func TestDoLookShowsHereByDefault(t *testing.T) {
 	assertMatch(t, "sally\r\n", bobConn.String())
 }
 
+func TestDoLookMeShowsMyDescription(t *testing.T) {
+}

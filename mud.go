@@ -1,6 +1,7 @@
 package main
 
 import (
+	"crypto/sha512"
 	"errors"
 	"fmt"
 	"io"
@@ -31,7 +32,7 @@ type HandlerMap map[string]CommandDesc
 
 var commandHandlers = HandlerMap{
 	"@desc":   {2, false, true, doDesc},
-	"connect": {1, true, false, doConnect},
+	"connect": {2, true, false, doConnect},
 	"emote":   {1, false, true, doEmote},
 	"go":      {1, false, true, doMove},
 	"look":    {1, false, true, doLook},
@@ -101,11 +102,24 @@ type Room struct {
 type Player struct {
 	key         int
 	name        string
+	password    [64]byte
 	description string
 	normalName  string
 	location    *Room
 	awake       bool
 	client      *Client
+}
+
+func (p *Player) Description() string {
+	if p.description == "" {
+		return "You see nothing special."
+	}
+	
+	return p.description
+}
+
+func (p *Player) SetPassword(raw string) {
+	p.password = sha512.Sum512([]byte(raw))
 }
 
 //
@@ -136,7 +150,7 @@ func (c *Client) tell(msg string, args ...interface{}) {
 	c.conn.Write([]byte(s))
 }
 
-func (w *World) NewPlayer(name string, location *Room) (p *Player, err error) {
+func (w *World) NewPlayer(name string, password string, location *Room) (p *Player, err error) {
 	normalName := strings.ToLower(name)
 
 	for _, player := range w.players {
@@ -147,6 +161,7 @@ func (w *World) NewPlayer(name string, location *Room) (p *Player, err error) {
 	}
 
 	p = &Player{key: idGen(), name: name, normalName: normalName}
+	p.SetPassword(password)
 	w.players[p.key] = p
 	w.MovePlayer(p, location)
 
@@ -255,10 +270,23 @@ func (w *World) handleCommand(handlerMap *HandlerMap, client *Client, command Co
 //
 
 func doConnect(world *World, client *Client, cmd Command) {
-	normalName := strings.ToLower(cmd.args)
+
+	if cmd.target == "" || cmd.args == "" {
+		client.tell("Try: connect <player> <password>")
+		return
+	}
+	
+	normalName := strings.ToLower(cmd.target)
+	passwordHash := sha512.Sum512([]byte(cmd.args))
 
 	for _, player := range world.players {
 		if player.normalName == normalName {
+
+			if player.password != passwordHash {
+				client.tell("Incorrect password.")
+				return
+			}
+			
 			client.player = player
 			client.player.awake = true
 			client.player.client = client
@@ -358,20 +386,26 @@ func (world *World) lookHere(client *Client) {
 }
 
 func doLook(world *World, client *Client, cmd Command) {
-	if cmd.args == "" {
+	if cmd.args == "" || cmd.args == "here" {
 		world.lookHere(client)
-	} else {
-		// TODO: Refactor when there are objects
-		client.tell("I don't see that here.")
+		return
 	}
+
+	if cmd.args == "me" {
+		client.tell(client.player.Description())
+		return
+	}
+
+	client.tell("I don't see that here.")
+
 }
 
 func welcome(client *Client) {
 	client.tell("-----------------------------------------------------")
 	client.tell("Welcome to this experimental MUD!")
 	client.tell("")
-	client.tell("To create a new player: create <player_name>")
-	client.tell("To connect as a player: connect <player_name>")
+	client.tell("To create a new player: create <name> <password>")
+	client.tell("To connect as a player: connect <name> <password>")
 	client.tell("To leave the game:      quit")
 	client.tell("-----------------------------------------------------")
 	client.tell("")
@@ -440,8 +474,8 @@ func initWorld() {
 	world.NewExit(den, "south", kitchen)
 	world.NewExit(kitchen, "north", den)
 
-	world.NewPlayer("God", hall)
-	world.NewPlayer("Wizard", hall)
+	world.NewPlayer("God", "xyzzy", hall)
+	world.NewPlayer("Wizard", "xyzzy", hall)
 }
 
 //
