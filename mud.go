@@ -108,7 +108,8 @@ func (e Exit) Description() string { return e.description }
 type Room struct {
 	key               int
 	name, description string
-	exits             Set
+	exits             map[int]*Exit
+	players           map[int]*Player
 }
 
 // Room implements Object interface
@@ -140,35 +141,46 @@ func NewWorld() *World {
 }
 
 func (w *World) NewRoom(name string) (r *Room, err error) {
-	r = &Room{key: idGen(), name: name, exits: NewSet()}
+	r = &Room{key: idGen(), name: name, exits: make(map[int]*Exit), players: make(map[int]*Player)}
 	w.rooms.Add(r)
-
 	return
+}
+
+// Move a player to a new room. Returns the player's new location,
+// and an error if the player could not be moved.
+func (w *World) MovePlayer(p *Player, destination *Room) (r *Room, err error) {
+	oldRoom := p.location
+	if oldRoom != nil { delete(oldRoom.players, p.key) }
+	p.location = destination
+	destination.players[p.key] = p
+	return destination, nil
 }
 
 func (w *World) NewPlayer(name string, location *Room) (p *Player, err error) {
 	if w.players.ContainsWhere(func(o Object) bool { return o.Name() == name }) {
 		err = errors.New("User already exists")
 	} else {
-		p = &Player{key: idGen(), name: name, location: location}
+		p = &Player{key: idGen(), name: name}
 		w.players.Add(p)
+		w.MovePlayer(p, location)
 	}
 
 	return
 }
 
 func (w *World) NewExit(source *Room, name string, destination *Room) (e *Exit, err error) {
-	foundExit := source.exits.ContainsWhere(func(o Object) bool {
-		return o.Name() == name
-	})
 
-	if foundExit {
-		err = errors.New("An exit with that name already exists.")
-	} else {
-		e = &Exit{key: idGen(), name: name, destination: destination}
-		w.exits.Add(e)
-		source.exits.Add(e)
+
+	for _, exit := range source.exits {
+		if exit.name == name {
+			err = errors.New("An exit with that name already exists.")
+			return
+		}
 	}
+
+	e = &Exit{key: idGen(), name: name, destination: destination}
+	w.exits.Add(e)
+	source.exits[e.key] = e
 
 	return
 }
@@ -186,8 +198,6 @@ func (w *World) parseCommand(client *Client, line string) Command {
 		if len(tokenized) == 2 {
 			return Command{verb: tokenized[0], args: tokenized[1]}
 		} else {
-			foundExit := false
-
 			// If the player is connected, do some special magic.
 			if client.player != nil {
 				// The user may have typed an exit name as a command. In that
@@ -195,18 +205,14 @@ func (w *World) parseCommand(client *Client, line string) Command {
 				// command
 				location := client.player.location
 
-				for exit := range location.exits.Iterator() {
+				for _, exit := range location.exits {
 					if tokenized[0] == exit.Name() {
-						foundExit = true
+						return Command{verb: "move", args: tokenized[0]}
 					}
 				}
 			}
 
-			if foundExit {
-				return Command{verb: "move", args: tokenized[0]}
-			} else {
-				return Command{verb: tokenized[0]}
-			}
+			return Command{verb: tokenized[0]}
 		}
 	}
 }
@@ -296,9 +302,9 @@ func doMove(world *World, client *Client, cmd Command) {
 	here := player.location
 
 	// Try to find an exit with the correct name.
-	for exit := range here.exits.Iterator() {
-		if exit.Name() == cmd.args {
-			player.location = exit.(*Exit).destination
+	for _, exit := range here.exits {
+		if exit.name == cmd.args {
+			world.MovePlayer(player, exit.destination)
 			lookHere(world, client)
 			return
 		}
@@ -330,10 +336,10 @@ func lookHere(world *World, client *Client) {
 		client.tell("\n" + here.description + "\n")
 	}
 
-	if here.exits.Len() > 0 {
+	if len(here.exits) > 0 {
 		client.tell("You can see the following exits:")
-		for exit := range here.exits.Iterator() {
-			client.tell("  %s", exit.Name())
+		for _, exit := range here.exits {
+			client.tell("  %s", exit.name)
 		}
 	}
 

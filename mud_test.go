@@ -262,3 +262,40 @@ func TestConnectingShouldWakeUpPlayers(t *testing.T) {
 		t.Errorf("Connecting should have woken up bob.")
 	}
 }
+
+func TestMovePlayer(t *testing.T) {
+	// Changes room
+	world := NewWorld()
+	hall, _ := world.NewRoom("The Hall")
+	den, _ := world.NewRoom("The Den")
+	bob, _ := world.NewPlayer("bob", hall)
+
+	// Old room has bob in it
+	if bob.location != hall {
+		t.Errorf("Bob should be in the Hall")
+	}
+
+	if _, exists := hall.players[bob.key]; !exists {
+		t.Errorf("Bob should be in the Hall")
+	}
+
+	if _, exists := den.players[bob.key]; exists {
+		t.Errorf("Bob should not be in the Den")
+	}
+
+	world.MovePlayer(bob, den)
+
+	// New room has bob in it.
+	if bob.location != den {
+		t.Errorf("Bob should be in the Den")
+	}
+
+	if _, exists := hall.players[bob.key]; exists {
+		t.Errorf("Bob should not be in the set of Den players")
+	}
+
+	if _, exists := den.players[bob.key]; !exists {
+		t.Errorf("Bob should be in the set of Den players")
+	}
+
+}
