@@ -120,6 +120,7 @@ func (r Room) Description() string { return r.description }
 type Player struct {
 	key               int
 	name, description string
+	normalName        string
 	location          *Room
 	awake             bool
 	client            *Client
@@ -132,17 +133,17 @@ func (p Player) Description() string { return p.description }
 
 type World struct {
 	players Set
-	rooms   Set
-	exits   Set
+	rooms   map[int]*Room
+	exits   map[int]*Exit
 }
 
 func NewWorld() *World {
-	return &World{NewSet(), NewSet(), NewSet()}
+	return &World{NewSet(), make(map[int]*Room), make(map[int]*Exit)}
 }
 
 func (w *World) NewRoom(name string) (r *Room, err error) {
 	r = &Room{key: idGen(), name: name, exits: make(map[int]*Exit), players: make(map[int]*Player)}
-	w.rooms.Add(r)
+	w.rooms[r.key] = r
 	return
 }
 
@@ -160,7 +161,7 @@ func (w *World) NewPlayer(name string, location *Room) (p *Player, err error) {
 	if w.players.ContainsWhere(func(o Object) bool { return o.Name() == name }) {
 		err = errors.New("User already exists")
 	} else {
-		p = &Player{key: idGen(), name: name}
+		p = &Player{key: idGen(), name: name, normalName: strings.ToLower(name)}
 		w.players.Add(p)
 		w.MovePlayer(p, location)
 	}
@@ -179,7 +180,7 @@ func (w *World) NewExit(source *Room, name string, destination *Room) (e *Exit, 
 	}
 
 	e = &Exit{key: idGen(), name: name, destination: destination}
-	w.exits.Add(e)
+	w.exits[e.key] = e
 	source.exits[e.key] = e
 
 	return
@@ -477,7 +478,7 @@ func main() {
 
 	initWorld()
 
-	infoLog.Println("World initialized with", world.rooms.Len(), "room(s) and", world.players.Len(), "player(s)")
+	infoLog.Println("World initialized with", len(world.rooms), "room(s) and", world.players.Len(), "player(s)")
 
 	go func() {
 		for {

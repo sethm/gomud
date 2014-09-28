@@ -91,7 +91,7 @@ func TestNewRoom(t *testing.T) {
 	if hall == nil || err != nil {
 		t.Errorf("Expected to create a new room.")
 	}
-	if world.rooms.Len() != 1 || !world.rooms.Contains(hall) {
+	if _, hasHall := world.rooms[hall.key] ; len(world.rooms) != 1 || !hasHall {
 		t.Errorf("Expected room to have been added to the world.")
 	}
 }
@@ -108,6 +108,15 @@ func TestNewPlayer(t *testing.T) {
 	}
 	if world.players.Len() != 1 || !world.players.Contains(bob) {
 		t.Errorf("Expected player to have been added to world.")
+	}
+
+	// Should store a normalized name
+	jim, _ := world.NewPlayer("JiM", hall)
+	if jim.name != "JiM" {
+		t.Errorf("Expected jim's display name to be 'JiM'")
+	}
+	if jim.normalName != "jim" {
+		t.Errorf("Expected jim's normal name to be 'jim'")
 	}
 }
 
@@ -159,7 +168,7 @@ func TestNewExitAddsToWorldSet(t *testing.T) {
 	world.NewExit(hall, "east", den)
 	world.NewExit(den, "west", hall)
 
-	if world.exits.Len() != 2 {
+	if len(world.exits) != 2 {
 		t.Errorf("Exits were not added to the global set:")
 	}
 }
