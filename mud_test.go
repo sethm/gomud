@@ -353,7 +353,7 @@ func TestDoConnectDoesNothingIfPlayerNotFound(t *testing.T) {
 	}
 }
 
-func TestDoConnectWithoutPasswordFAils(t *testing.T) {
+func TestDoConnectWithoutPasswordFails(t *testing.T) {
 	conn := NewMockConn()
 	client := NewClient(conn) // &Client{conn: conn}
 	world := NewWorld()
@@ -369,7 +369,7 @@ func TestDoConnectWithoutPasswordFAils(t *testing.T) {
 	}
 }
 
-func TestDoConnectWithWrongPasswordFAils(t *testing.T) {
+func TestDoConnectWithWrongPasswordFails(t *testing.T) {
 	conn := NewMockConn()
 	client := NewClient(conn)
 	world := NewWorld()
