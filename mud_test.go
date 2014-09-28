@@ -1,10 +1,19 @@
 package main
 
 import (
+	"bytes"
 	"net"
 	"testing"
 	"time"
+	"regexp"
 )
+
+func assertMatch(t *testing.T, expected string, match string) {
+	exp, _ := regexp.Compile(expected)
+	if !exp.MatchString(match) {
+		t.Errorf("String match not found. Expected: '%s', Actual: '%s'", expected, match)
+	}
+}
 
 //
 // Implement a mock version of net.Conn for testing
@@ -12,12 +21,11 @@ import (
 
 type MockConn struct {
 	readBytes    [][]byte
-	writtenBytes []byte
+	writeBuffer  *bytes.Buffer
 
 	readError        *error
 	closeAfterWrites int
 	numWrites        int
-	writtenBytePtr   int
 }
 
 func (conn MockConn) Read(b []byte) (n int, err error) {
@@ -27,9 +35,9 @@ func (conn MockConn) Read(b []byte) (n int, err error) {
 }
 
 func (conn MockConn) Write(b []byte) (n int, err error) {
-	written := copy(conn.writtenBytes[conn.writtenBytePtr:], b)
-	conn.writtenBytePtr += written
-	return written, nil
+	// conn.writeBuffer.Reset()
+	n, err = conn.writeBuffer.Write(b)
+	return
 }
 
 func (conn MockConn) Close() error {
@@ -57,7 +65,14 @@ func (conn MockConn) SetWriteDeadline(t time.Time) error {
 }
 
 func NewMockConn() *MockConn {
-	return &MockConn{readBytes: make([][]byte, 1024, 1024), writtenBytes: make([]byte, 1024, 1024)}
+	buffer := bytes.NewBuffer(make([]byte, 1024, 1024))
+	return &MockConn{readBytes: make([][]byte, 1024, 1024), writeBuffer: buffer}
+}
+
+
+// Automatically convert writtenBytes into a string
+func (conn MockConn) String() string {
+	return conn.writeBuffer.String()
 }
 
 func TestKeyGen(t *testing.T) {
@@ -135,10 +150,7 @@ func TestTell(t *testing.T) {
 	client := NewClient(conn) // &Client{conn: conn}
 	client.tell("Hello, world!")
 
-	actual := string(conn.writtenBytes[0:16])
-	if actual != "Hello, world!\r\n\u0000" {
-		t.Errorf("`tell` did not write bytes correctly: '%s'", actual)
-	}
+	assertMatch(t, "Hello, world!\r\n", conn.String())
 }
 
 func TestNewExit(t *testing.T) {
@@ -196,6 +208,10 @@ var commandInputs = []string{
 	"say foo bar baz",
 	"@desc me I'm very tall",
 	"tell bob Hey there!",
+	"\"hey bob",
+	":waves hello.",
+	"",
+	"tell bob", // Valid, but missing arg
 }
 
 var expectedCommands = []Command{
@@ -208,6 +224,10 @@ var expectedCommands = []Command{
 	{"say", "", "foo bar baz"},
 	{"@desc", "me", "I'm very tall"},
 	{"tell", "bob", "Hey there!"},
+	{"say", "", "hey bob"},
+	{"emote", "", "waves hello."},
+	{"", "", ""},
+	{"tell", "bob", ""},
 }
 
 func TestParseCommand(t *testing.T) {
@@ -258,28 +278,6 @@ func TestPlayersCanBeAwakeOrAsleep(t *testing.T) {
 	}
 }
 
-func TestConnectingShouldWakeUpPlayers(t *testing.T) {
-	conn := NewMockConn()
-	client := NewClient(conn) // &Client{conn: conn}
-	world := NewWorld()
-	hall, _ := world.NewRoom("The Hall")
-	bob, _ := world.NewPlayer("bob", hall)
-
-	if bob.awake {
-		t.Errorf("Bob should not be awake.")
-	}
-
-	doConnect(world, client, Command{"connect", "", "bob"})
-
-	if client.player != bob {
-		t.Errorf("Connecting should have linked the client and the player")
-	}
-
-	if !bob.awake {
-		t.Errorf("Connecting should have woken up bob.")
-	}
-}
-
 func TestMovePlayer(t *testing.T) {
 	// Changes room
 	world := NewWorld()
@@ -316,3 +314,142 @@ func TestMovePlayer(t *testing.T) {
 	}
 
 }
+
+func TestDoConnectShouldWakeUpPlayers(t *testing.T) {
+	conn := NewMockConn()
+	client := NewClient(conn) // &Client{conn: conn}
+	world := NewWorld()
+	hall, _ := world.NewRoom("The Hall")
+	bob, _ := world.NewPlayer("bob", hall)
+
+	if bob.awake {
+		t.Errorf("Bob should not be awake.")
+	}
+
+	doConnect(world, client, Command{"connect", "", "bob"})
+
+	if client.player != bob {
+		t.Errorf("Connecting should have linked the client and the player")
+	}
+
+	if !bob.awake {
+		t.Errorf("Connecting should have woken up bob.")
+	}
+}
+
+func TestDoConnectDoesNothingIfPlayerNotFound(t *testing.T) {
+	conn := NewMockConn()
+	client := NewClient(conn) // &Client{conn: conn}
+	world := NewWorld()
+	hall, _ := world.NewRoom("The Hall")
+	bob, _ := world.NewPlayer("bob", hall)
+
+	doConnect(world, client, Command{"connect", "", "jim"})
+
+	assertMatch(t, "No such player!\r\n", conn.String())
+
+	if bob.awake {
+		t.Errorf("Bob should still be asleep.")
+	}
+}
+
+func TestDoSay(t *testing.T) {
+	world := NewWorld()
+
+	bobConn := NewMockConn()
+	jimConn := NewMockConn()
+	bobClient := NewClient(bobConn)
+	jimClient := NewClient(jimConn)
+	
+	hall, _ := world.NewRoom("The Hall")
+
+	world.NewPlayer("bob", hall)
+	world.NewPlayer("jim", hall)
+
+	doConnect(world, bobClient, Command{"connect", "", "bob"})
+	doConnect(world, jimClient, Command{"connect", "", "jim"})
+
+	doSay(world, bobClient, Command{"say", "", "Testing 1 2 3"})
+
+	assertMatch(t, "You say, \"Testing 1 2 3\"\r\n", bobConn.String())
+	assertMatch(t, "bob says, \"Testing 1 2 3\"\r\n", jimConn.String())
+}
+
+func TestDoEmote(t *testing.T) {
+	world := NewWorld()
+
+	bobConn := NewMockConn()
+	jimConn := NewMockConn()
+	bobClient := NewClient(bobConn)
+	jimClient := NewClient(jimConn)
+	
+	hall, _ := world.NewRoom("The Hall")
+
+	world.NewPlayer("bob", hall)
+	world.NewPlayer("jim", hall)
+
+	doConnect(world, bobClient, Command{"connect", "", "bob"})
+	doConnect(world, jimClient, Command{"connect", "", "jim"})
+
+	doEmote(world, bobClient, Command{"emote", "", "tests."})
+
+	assertMatch(t, "bob tests.\r\n", bobConn.String())
+	assertMatch(t, "bob tests.\r\n", jimConn.String())
+}
+
+func TestDoQuit(t *testing.T) {
+	world := NewWorld()
+
+	conn := NewMockConn()
+	client := NewClient(conn)
+
+	if client.quitRequested {
+		t.Errorf("Expected 'quitRequested' to have been false.")
+	}
+
+	doQuit(world, client, Command{"quit", "", ""})
+
+	if !client.quitRequested {
+		t.Errorf("Expected 'quitRequested' to have been set.")
+	}
+}
+
+func TestDoLookShowsHereByDefault(t *testing.T) {
+	world := NewWorld()
+
+	bobConn:= NewMockConn()
+	sallyConn := NewMockConn()
+	bobClient := NewClient(bobConn)
+	sallyClient := NewClient(sallyConn)
+
+	hall, _ := world.NewRoom("The Hall")
+	den, _ := world.NewRoom("The Den")
+
+	hall.description = "It's a lovely hall"
+
+	world.NewExit(hall, "east", den)
+	world.NewExit(den, "west", hall)
+	
+	world.NewRoom("The Den")
+	
+	world.NewPlayer("bob", hall)
+	world.NewPlayer("jim", hall)
+	world.NewPlayer("sally", hall)
+
+	doConnect(world, bobClient, Command{"connect", "", "bob"})
+	doConnect(world, sallyClient, Command{"connect", "", "sally"})
+
+	doLook(world, bobClient, Command{"look", "", ""})
+
+	// Should see the name of the room
+	assertMatch(t, "The Hall", bobConn.String())
+	// Should see the description of the room
+	assertMatch(t, "It's a lovely hall", bobConn.String())
+	// Should see the exit
+	assertMatch(t, "east", bobConn.String())
+	// Should see jim (asleep)
+	assertMatch(t, "jim \\(asleep\\)\r\n", bobConn.String())
+	// Should see sally (awake)
+	assertMatch(t, "sally\r\n", bobConn.String())
+}
+

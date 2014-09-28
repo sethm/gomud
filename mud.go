@@ -79,6 +79,7 @@ type Exit struct {
 	name        string
 	normalName  string
 	description string
+	owner       *Player
 	destination *Room
 }
 
@@ -89,6 +90,7 @@ type Room struct {
 	key         int
 	name        string
 	description string
+	owner       *Player
 	exits       map[int]*Exit
 	players     map[int]*Player
 }
@@ -192,10 +194,6 @@ func (w *World) parseCommand(client *Client, line string) Command {
 
 	tokenized := strings.SplitN(line, " ", 2)
 
-	if len(tokenized) == 0 {
-		return Command{}
-	}
-
 	verb := tokenized[0]
 	info, isKeyword := commandHandlers[verb]
 
@@ -257,10 +255,6 @@ func (w *World) handleCommand(handlerMap *HandlerMap, client *Client, command Co
 //
 
 func doConnect(world *World, client *Client, cmd Command) {
-	if client.player != nil {
-		return
-	}
-
 	normalName := strings.ToLower(cmd.args)
 
 	for _, player := range world.players {
@@ -269,6 +263,7 @@ func doConnect(world *World, client *Client, cmd Command) {
 			client.player.awake = true
 			client.player.client = client
 			client.tell("Welcome, %s!", player.name)
+			world.lookHere(client)
 
 			world.tellAllButMe(client.player, player.name+" has connected.")
 			return
@@ -300,7 +295,9 @@ func doQuit(world *World, client *Client, cmd Command) {
 }
 
 func doEmote(world *World, client *Client, cmd Command) {
-	client.tell(client.player.name + " " + cmd.args)
+	player := client.player
+	client.tell(player.name+" "+cmd.args)
+	world.tellAllButMe(player, player.name+" "+cmd.args)
 }
 
 func doDesc(world *World, client *Client, cmd Command) {
@@ -322,7 +319,7 @@ func doMove(world *World, client *Client, cmd Command) {
 	for _, exit := range here.exits {
 		if exit.name == cmd.args {
 			world.MovePlayer(player, exit.destination)
-			lookHere(world, client)
+			world.lookHere(client)
 			return
 		}
 	}
@@ -330,10 +327,10 @@ func doMove(world *World, client *Client, cmd Command) {
 	client.tell("There's no exit in that direction!")
 }
 
-func lookHere(world *World, client *Client) {
+func (world *World) lookHere(client *Client) {
 	player := client.player
 	here := player.location
-	client.tell("You are in: %s", here.name)
+	client.tell("%s", here.name)
 
 	if here.description != "" {
 		client.tell("\n" + here.description + "\n")
@@ -362,7 +359,7 @@ func lookHere(world *World, client *Client) {
 
 func doLook(world *World, client *Client, cmd Command) {
 	if cmd.args == "" {
-		lookHere(world, client)
+		world.lookHere(client)
 	} else {
 		// TODO: Refactor when there are objects
 		client.tell("I don't see that here.")
@@ -408,7 +405,9 @@ func connectionLoop(conn net.Conn) {
 		if len(line) > 0 {
 			command := world.parseCommand(client, line)
 			debugLog.Println("Parsed command:", command)
-			world.handleCommand(&commandHandlers, client, command)
+			if command.verb != "" {
+				world.handleCommand(&commandHandlers, client, command)
+			}
 		}
 
 		if client.quitRequested {
