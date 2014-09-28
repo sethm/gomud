@@ -383,9 +383,8 @@ func connectionLoop(conn net.Conn) {
 		}
 
 		line := strings.TrimSpace(string(linebuf[:n]))
-		debugLog.Println(fmt.Sprintf("[%s]: %s", conn.RemoteAddr(), line))
-
 		command := world.parseCommand(client, line)
+		debugLog.Println("Parsed command:", command)
 		world.handleCommand(&preAuthHandlers, &postAuthHandlers, client, command)
 
 		if client.quitRequested {
@@ -395,11 +394,12 @@ func connectionLoop(conn net.Conn) {
 
 	infoLog.Println("Disconnection from", conn.RemoteAddr())
 
-	world.tellAllButMe(client.player, client.player.name+" has disconnected.")
-
-	client.player.awake = false
-	client.player.client = nil
-	client.player = nil
+	if client.player != nil {
+		world.tellAllButMe(client.player, client.player.name+" has disconnected.")
+		client.player.awake = false
+		client.player.client = nil
+		client.player = nil
+	}
 
 	conn.Close()
 }
