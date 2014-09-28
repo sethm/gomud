@@ -192,7 +192,10 @@ var commandInputs = []string{
 	"walk east",
 	"west", // There's an exit to the west
 	"east", // No such exit
+	"say",  // There's an exit named 'say', but that's a keyword!
 	"say foo bar baz",
+	"@desc me I'm very tall",
+	"tell bob Hey there!",
 }
 
 var expectedCommands = []Command{
@@ -201,7 +204,10 @@ var expectedCommands = []Command{
 	{"walk", "", "east"},
 	{"move", "", "west"},
 	{"east", "", ""},
+	{"say", "", ""},
 	{"say", "", "foo bar baz"},
+	{"@desc", "me", "I'm very tall"},
+	{"tell", "bob", "Hey there!"},
 }
 
 func TestParseCommand(t *testing.T) {
@@ -212,8 +218,10 @@ func TestParseCommand(t *testing.T) {
 
 	bedroom, _ := world.NewRoom("The Bedroom")
 	hall, _ := world.NewRoom("The Hall")
+	den, _ := world.NewRoom("The Den")
 
 	world.NewExit(bedroom, "west", hall)
+	world.NewExit(bedroom, "say", den)    // Trying to be sneaky!
 
 	player, _ := world.NewPlayer("bob", bedroom)
 	client.player = player

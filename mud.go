@@ -20,33 +20,28 @@ var idGen func() int = KeyGen()
 
 type CommandHandler func(*World, *Client, Command)
 
-type HandlerMap map[string]CommandHandler
+type HandlerMap map[string]CommandDescription
 
-var argCounts = map[string]int{
-	"connect": 1,
-	"quit":    0,
-	"go":      1,
-	"walk":    1,
-	"move":    1,
-	"say":     1,
-	"emote":   1,
-	"@desc":   2,
+type CommandDescription struct {
+	argCount int
+	preAuth  bool
+	postAuth bool
+	handler  CommandHandler
 }
 
-var preAuthHandlers = HandlerMap{
-	"connect": doConnect,
-	"quit":    doQuit,
-}
-
-var postAuthHandlers = HandlerMap{
-	"go":    doMove,
-	"walk":  doMove,
-	"move":  doMove,
-	"say":   doSay,
-	"emote": doEmote,
-	"look":  doLook,
-	"@desc": doDesc,
-	"quit":  doQuit,
+// TODO: Refactor these three maps into a map of name to
+// CommandDescription struct
+var registeredCommands = HandlerMap{
+	"@desc":   {2, false, true,  doDesc},
+	"connect": {1, true,  false, doConnect},
+	"emote":   {1, false, true,  doEmote},
+	"go":      {1, false, true,  doMove},
+	"look":    {1, false, true,  doLook},
+	"move":    {1, false, true,  doMove},
+	"quit":    {0, true,  true,  doQuit},
+	"say":     {1, false, true,  doSay},
+	"tell":    {2, false, true,  doTell},
+	"walk":    {1, false, true,  doMove},
 }
 
 //
@@ -195,44 +190,66 @@ func (w *World) parseCommand(client *Client, line string) Command {
 		return Command{verb: "emote", args: line[1:len(line)]}
 	} else {
 		tokenized := strings.SplitN(line, " ", 2)
-		if len(tokenized) == 2 {
-			return Command{verb: tokenized[0], args: tokenized[1]}
-		} else {
-			// If the player is connected, do some special magic.
-			if client.player != nil {
-				// The user may have typed an exit name as a command. In that
-				// case, we want to interpret what she's said as a `move`
-				// command
-				location := client.player.location
 
-				for _, exit := range location.exits {
-					if tokenized[0] == exit.name {
-						return Command{verb: "move", args: tokenized[0]}
-					}
+		if len(tokenized) == 0 {
+			return Command{}
+		}
+
+		verb := tokenized[0]
+		info, isKeyword := registeredCommands[verb]
+
+		// See if we should treat the verb as an exit direction
+		if !isKeyword && client.player != nil {
+			location := client.player.location	
+			for _, exit := range location.exits {
+				if tokenized[0] == exit.name {
+					return Command{verb: "move", args: tokenized[0]}
 				}
 			}
-
-			return Command{verb: tokenized[0]}
 		}
+		
+		if len(tokenized) == 1 {
+			return Command{verb: verb}
+		}
+
+		if info.argCount == 2 {
+			// Further tokenize the args into target/args
+			argTokens := strings.SplitN(tokenized[1], " ", 2)
+
+			if len(argTokens) == 1 {
+				return Command{verb: verb, target: argTokens[0]}
+			}
+
+			return Command{verb: verb, target: argTokens[0], args: argTokens[1]}
+		}
+
+		return Command{verb: verb, args: tokenized[1]}
 	}
 }
 
-func (w *World) handleCommand(preAuthHandlers *HandlerMap, postAuthHandlers *HandlerMap, client *Client, command Command) {
+func (w *World) handleCommand(handlerMap *HandlerMap, client *Client, command Command) {
+	
+	description, exists := (*handlerMap)[command.verb]
 
-	if client.player == nil {
-		w.dispatchToHandler((*preAuthHandlers)[command.verb], client, command)
+	if !exists {
+		client.tell("Huh?")
 		return
 	}
 
-	w.dispatchToHandler((*postAuthHandlers)[command.verb], client, command)
-}
-
-func (w *World) dispatchToHandler(handler CommandHandler, client *Client, cmd Command) {
-	if handler == nil {
-		client.tell("Huh?")
-	} else {
-		handler(w, client, cmd)
+	// Are we pre-auth?
+	if client.player == nil && description.preAuth {
+		// OK to handle.
+		description.handler(w, client, command)
+		return
 	}
+
+	// ... or are we post-auth?
+	if client.player != nil && description.postAuth {
+		description.handler(w, client, command)
+		return
+	}
+
+	client.tell("Huh?")
 }
 
 //
@@ -291,6 +308,10 @@ func doDesc(world *World, client *Client, cmd Command) {
 	here := player.location
 	here.description = cmd.args
 	client.tell("Set.")
+}
+
+func doTell(world *World, client *Client, cmd Command) {
+	client.tell("Not Implemented Yet.")
 }
 
 func doMove(world *World, client *Client, cmd Command) {
@@ -383,9 +404,12 @@ func connectionLoop(conn net.Conn) {
 		}
 
 		line := strings.TrimSpace(string(linebuf[:n]))
-		command := world.parseCommand(client, line)
-		debugLog.Println("Parsed command:", command)
-		world.handleCommand(&preAuthHandlers, &postAuthHandlers, client, command)
+
+		if len(line) > 0 {
+			command := world.parseCommand(client, line)
+			debugLog.Println("Parsed command:", command)
+			world.handleCommand(&registeredCommands, client, command)
+		}
 
 		if client.quitRequested {
 			break
