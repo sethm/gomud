@@ -78,15 +78,6 @@ type Client struct {
 	quitRequested bool
 }
 
-func NewClient(conn net.Conn) *Client {
-	return &Client{conn: conn, quitRequested: false}
-}
-
-func (c *Client) tell(msg string, args ...interface{}) {
-	s := fmt.Sprintf(msg+"\r\n", args...)
-	c.conn.Write([]byte(s))
-}
-
 //
 // Exits link two rooms together
 //
@@ -137,18 +128,16 @@ func (w *World) NewRoom(name string) (r *Room, err error) {
 	return
 }
 
-// Move a player to a new room. Returns the player's new location,
-// and an error if the player could not be moved.
-func (w *World) MovePlayer(p *Player, destination *Room) (r *Room, err error) {
-	oldRoom := p.location
-	if oldRoom != nil { delete(oldRoom.players, p.key) }
-	p.location = destination
-	destination.players[p.key] = p
-	return destination, nil
+func NewClient(conn net.Conn) *Client {
+	return &Client{conn: conn, quitRequested: false}
+}
+
+func (c *Client) tell(msg string, args ...interface{}) {
+	s := fmt.Sprintf(msg+"\r\n", args...)
+	c.conn.Write([]byte(s))
 }
 
 func (w *World) NewPlayer(name string, location *Room) (p *Player, err error) {
-
 	normalName := strings.ToLower(name)
 	
 	for _, player := range w.players {
@@ -163,6 +152,16 @@ func (w *World) NewPlayer(name string, location *Room) (p *Player, err error) {
 	w.MovePlayer(p, location)
 
 	return
+}
+
+// Move a player to a new room. Returns the player's new location,
+// and an error if the player could not be moved.
+func (w *World) MovePlayer(p *Player, destination *Room) (r *Room, err error) {
+	oldRoom := p.location
+	if oldRoom != nil { delete(oldRoom.players, p.key) }
+	p.location = destination
+	destination.players[p.key] = p
+	return destination, nil
 }
 
 func (w *World) NewExit(source *Room, name string, destination *Room) (e *Exit, err error) {
