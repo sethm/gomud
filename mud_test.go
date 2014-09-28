@@ -85,7 +85,7 @@ func TestNewRoom(t *testing.T) {
 	world := NewWorld()
 	hall, err := world.NewRoom("The Hall")
 
-	if hall.Name() != "The Hall" {
+	if hall.name != "The Hall" {
 		t.Errorf("Expected name to be 'The Hall'")
 	}
 	if hall == nil || err != nil {
@@ -100,7 +100,7 @@ func TestNewPlayer(t *testing.T) {
 	world := NewWorld()
 	hall, _ := world.NewRoom("The Hall")
 	bob, _ := world.NewPlayer("bob", hall)
-	if bob.Name() != "bob" {
+	if bob.name != "bob" {
 		t.Errorf("Expected player name to be bob, but was %s", bob.name)
 	}
 	if bob.location != hall {
@@ -149,10 +149,10 @@ func TestNewExit(t *testing.T) {
 	east, err1 := world.NewExit(hall, "east", den)
 	west, err2 := world.NewExit(den, "west", hall)
 
-	if east.Name() != "east" {
+	if east.name != "east" {
 		t.Errorf("Expected hall exit to be named 'east'")
 	}
-	if west.Name() != "west" {
+	if west.name != "west" {
 		t.Errorf("Expected hall exit to be named 'east'")
 	}
 	if err1 != nil || err2 != nil {

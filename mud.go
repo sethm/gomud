@@ -96,11 +96,6 @@ type Exit struct {
 	destination       *Room
 }
 
-// Exit implements Object interface
-func (e Exit) Key() int            { return e.key }
-func (e Exit) Name() string        { return e.name }
-func (e Exit) Description() string { return e.description }
-
 //
 // A room is a place in the world.
 //
@@ -111,11 +106,9 @@ type Room struct {
 	players           map[int]*Player
 }
 
-// Room implements Object interface
-func (r Room) Key() int            { return r.key }
-func (r Room) Name() string        { return r.name }
-func (r Room) Description() string { return r.description }
-
+//
+// A player interacts with the world
+//
 type Player struct {
 	key               int
 	name, description string
@@ -125,11 +118,9 @@ type Player struct {
 	client            *Client
 }
 
-// Player implements Object interface
-func (p Player) Key() int            { return p.key }
-func (p Player) Name() string        { return p.name }
-func (p Player) Description() string { return p.description }
-
+//
+// The world is the sum total of all objects
+//
 type World struct {
 	players map[int]*Player
 	rooms   map[int]*Room
@@ -210,7 +201,7 @@ func (w *World) parseCommand(client *Client, line string) Command {
 				location := client.player.location
 
 				for _, exit := range location.exits {
-					if tokenized[0] == exit.Name() {
+					if tokenized[0] == exit.name {
 						return Command{verb: "move", args: tokenized[0]}
 					}
 				}
@@ -279,7 +270,7 @@ func (world *World) tellAllButMe(me *Player, fmt string, args ...interface{}) {
 func doSay(world *World, client *Client, cmd Command) {
 	client.tell("You say, \"" + cmd.args + "\"")
 	player := client.player
-	world.tellAllButMe(player, player.Name() + " says, \"" + cmd.args + "\"")
+	world.tellAllButMe(player, player.name + " says, \"" + cmd.args + "\"")
 }
 
 func doQuit(world *World, client *Client, cmd Command) {
@@ -399,7 +390,7 @@ func connectionLoop(conn net.Conn) {
 
 	infoLog.Println("Disconnection from", conn.RemoteAddr())
 
-	world.tellAllButMe(client.player, client.player.Name() + " has disconnected.")
+	world.tellAllButMe(client.player, client.player.name + " has disconnected.")
 
 	client.player.awake = false
 	client.player.client = nil
