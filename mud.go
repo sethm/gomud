@@ -175,12 +175,12 @@ func (w *World) NewPlayer(name string, password string, location *Room) (p *Play
 
 // Move a player to a new room. Returns the player's new location,
 // and an error if the player could not be moved.
-func (w *World) MovePlayer(p *Player, destination *Room) (*Room, error) {
+func (w *World) MovePlayer(p *Player, d *Room) (*Room, error) {
 	p.Lock()
 	defer p.Unlock()
 
-	destination.Lock()
-	defer destination.Unlock()
+	d.Lock()
+	defer d.Unlock()
 
 	oldRoom := p.location
 
@@ -191,13 +191,13 @@ func (w *World) MovePlayer(p *Player, destination *Room) (*Room, error) {
 		delete(oldRoom.players, p.key)
 	}
 
-	p.location = destination
-	destination.players[p.key] = p
+	p.location = d
+	d.players[p.key] = p
 
 	// Error may become non-nil in the future, when exits and rooms
 	// have guards / locks
 
-	return destination, nil
+	return d, nil
 }
 
 func (w *World) NewExit(source *Room, name string, destination *Room) (e *Exit, err error) {
