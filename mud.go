@@ -20,28 +20,26 @@ var idGen func() int = KeyGen()
 
 type CommandHandler func(*World, *Client, Command)
 
-type HandlerMap map[string]CommandDescription
-
-type CommandDescription struct {
+type CommandDesc struct {
 	argCount int
 	preAuth  bool
 	postAuth bool
 	handler  CommandHandler
 }
 
-// TODO: Refactor these three maps into a map of name to
-// CommandDescription struct
-var registeredCommands = HandlerMap{
-	"@desc":   {2, false, true,  doDesc},
-	"connect": {1, true,  false, doConnect},
-	"emote":   {1, false, true,  doEmote},
-	"go":      {1, false, true,  doMove},
-	"look":    {1, false, true,  doLook},
-	"move":    {1, false, true,  doMove},
-	"quit":    {0, true,  true,  doQuit},
-	"say":     {1, false, true,  doSay},
-	"tell":    {2, false, true,  doTell},
-	"walk":    {1, false, true,  doMove},
+type HandlerMap map[string]CommandDesc
+
+var commandHandlers = HandlerMap{
+	"@desc":   {2, false, true, doDesc},
+	"connect": {1, true, false, doConnect},
+	"emote":   {1, false, true, doEmote},
+	"go":      {1, false, true, doMove},
+	"look":    {1, false, true, doLook},
+	"move":    {1, false, true, doMove},
+	"quit":    {0, true, true, doQuit},
+	"say":     {1, false, true, doSay},
+	"tell":    {2, false, true, doTell},
+	"walk":    {1, false, true, doMove},
 }
 
 //
@@ -199,7 +197,7 @@ func (w *World) parseCommand(client *Client, line string) Command {
 	}
 
 	verb := tokenized[0]
-	info, isKeyword := registeredCommands[verb]
+	info, isKeyword := commandHandlers[verb]
 
 	// See if we should treat the verb as an exit direction
 	if !isKeyword && client.player != nil {
@@ -410,7 +408,7 @@ func connectionLoop(conn net.Conn) {
 		if len(line) > 0 {
 			command := world.parseCommand(client, line)
 			debugLog.Println("Parsed command:", command)
-			world.handleCommand(&registeredCommands, client, command)
+			world.handleCommand(&commandHandlers, client, command)
 		}
 
 		if client.quitRequested {
