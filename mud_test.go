@@ -177,30 +177,6 @@ func TestNewExitFailsWhenCreatingDuplicateExits(t *testing.T) {
 	}
 }
 
-// We cannot use '==' to compare Commands, so we must implement our
-// own equality function.
-func equalCommands(a Command, b Command) bool {
-	if a.verb != b.verb {
-		return false
-	}
-
-	if a.args.argString != b.args.argString {
-		return false
-	}
-
-	if len(a.args.argSlice) != len(b.args.argSlice) {
-		return false
-	}
-
-	for i, arg := range a.args.argSlice {
-		if arg != b.args.argSlice[i] {
-			return false
-		}
-	}
-
-	return true
-}
-
 var commandInputs = []string{
 	"",
 	"look",
@@ -211,12 +187,12 @@ var commandInputs = []string{
 }
 
 var expectedCommands = []Command{
-	{"", CommandArgs{"", []string{}}},
-	{"look", CommandArgs{"", []string{}}},
-	{"walk", CommandArgs{"east", []string{"east"}}},
-	{"move", CommandArgs{"west", []string{"west"}}},
-	{"east", CommandArgs{"", []string{}}},
-	{"say", CommandArgs{"foo bar baz", []string{"foo", "bar", "baz"}}},
+	{"", "", ""},
+	{"look", "", ""},
+	{"walk", "", "east"},
+	{"move", "", "west"},
+	{"east", "", ""},
+	{"say", "", "foo bar baz"},
 }
 
 func TestParseCommand(t *testing.T) {
@@ -236,7 +212,7 @@ func TestParseCommand(t *testing.T) {
 	for i, cmd := range commandInputs {
 		command := world.parseCommand(client, cmd)
 
-		if !equalCommands(command, expectedCommands[i]) {
+		if command != expectedCommands[i] {
 			t.Errorf("%d: Expected args to be equal. Actual: %s", i, command)
 		}
 	}
@@ -276,7 +252,7 @@ func TestConnectingShouldWakeUpPlayers(t *testing.T) {
 		t.Errorf("Bob should not be awake.")
 	}
 
-	doConnect(world, client, CommandArgs{"bob", []string{"bob"}})
+	doConnect(world, client, Command{"connect", "", "bob"})
 
 	if client.player != bob {
 		t.Errorf("Connecting should have linked the client and the player")

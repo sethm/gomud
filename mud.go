@@ -19,9 +19,20 @@ var connections Set = NewSet()
 var debugLog, infoLog, errorLog *log.Logger
 var idGen func() int = KeyGen()
 
-type CommandHandler func(*World, *Client, CommandArgs)
+type CommandHandler func(*World, *Client, Command)
 
 type HandlerMap map[string]CommandHandler
+
+var argCounts = map[string]int{
+	"connect": 1,
+	"quit":    0,
+	"go":      1,
+	"walk":    1,
+	"move":    1,
+	"say":     1,
+	"emote":   1,
+	"@desc":   2,
+}
 
 var preAuthHandlers = HandlerMap{
 	"connect": doConnect,
@@ -51,16 +62,11 @@ func KeyGen() func() int {
 	}
 }
 
-// Arguments to a command
-type CommandArgs struct {
-	argString string
-	argSlice  []string
-}
-
 // A command entered at the MUD's prompt
 type Command struct {
-	verb string
-	args CommandArgs
+	verb   string
+	target string
+	args   string
 }
 
 //
@@ -172,17 +178,14 @@ func (w *World) NewExit(source *Room, name string, destination *Room) (e *Exit, 
 func (w *World) parseCommand(client *Client, line string) Command {
 	// The user may have typed `"foo`, which we want to interpret
 	// as "say foo".
-
 	if strings.HasPrefix(line, "\"") {
-		sayText := line[1:len(line)]
-		return Command{"say", CommandArgs{sayText, strings.Split(sayText, " ")}}
+		return Command{verb: "say", args: line[1:len(line)]}
 	} else if strings.HasPrefix(line, ":") {
-		emoteText := line[1:len(line)]
-		return Command{"emote", CommandArgs{emoteText, strings.Split(emoteText, " ")}}
+		return Command{verb: "emote", args: line[1:len(line)]}
 	} else {
 		tokenized := strings.SplitN(line, " ", 2)
 		if len(tokenized) == 2 {
-			return Command{tokenized[0], CommandArgs{tokenized[1], strings.Split(tokenized[1], " ")}}
+			return Command{verb: tokenized[0], args: tokenized[1]}
 		} else {
 			foundExit := false
 
@@ -201,9 +204,9 @@ func (w *World) parseCommand(client *Client, line string) Command {
 			}
 
 			if foundExit {
-				return Command{"move", CommandArgs{tokenized[0], []string{tokenized[0]}}}
+				return Command{verb: "move", args: tokenized[0]}
 			} else {
-				return Command{tokenized[0], CommandArgs{"", []string{}}}
+				return Command{verb: tokenized[0]}
 			}
 		}
 	}
@@ -212,18 +215,18 @@ func (w *World) parseCommand(client *Client, line string) Command {
 func (w *World) handleCommand(preAuthHandlers *HandlerMap, postAuthHandlers *HandlerMap, client *Client, command Command) {
 
 	if client.player == nil {
-		w.dispatchToHandler((*preAuthHandlers)[command.verb], client, command.args)
+		w.dispatchToHandler((*preAuthHandlers)[command.verb], client, command)
 		return
 	}
 
-	w.dispatchToHandler((*postAuthHandlers)[command.verb], client, command.args)
+	w.dispatchToHandler((*postAuthHandlers)[command.verb], client, command)
 }
 
-func (w *World) dispatchToHandler(handler CommandHandler, client *Client, args CommandArgs) {
+func (w *World) dispatchToHandler(handler CommandHandler, client *Client, cmd Command) {
 	if handler == nil {
 		client.tell("Huh?")
 	} else {
-		handler(w, client, args)
+		handler(w, client, cmd)
 	}
 }
 
@@ -233,13 +236,13 @@ func (w *World) dispatchToHandler(handler CommandHandler, client *Client, args C
 
 // TODO: Refactor and clean up the 'if client.player' stuff
 
-func doConnect(world *World, client *Client, args CommandArgs) {
+func doConnect(world *World, client *Client, cmd Command) {
 	if client.player != nil {
 		return
 	}
 
 	player := world.players.SelectFirst(func(o Object) bool {
-		return o.Name() == args.argString
+		return o.Name() == cmd.args
 	})
 
 	if player == nil {
@@ -253,13 +256,11 @@ func doConnect(world *World, client *Client, args CommandArgs) {
 	client.player.client = client
 	client.tell("Welcome, %s!", player.Name())
 
-	here := client.player.location
-	world.tellAllButMe(here, client.player, player.Name() + " has connected.")
+	world.tellAllButMe(client.player, player.Name() + " has connected.")
 
 }
 
-func (world *World) tellAllButMe(room *Room, me *Player, fmt string, args ...interface{}) {
-
+func (world *World) tellAllButMe(me *Player, fmt string, args ...interface{}) {
 	players := world.PlayersAt(me.location)
 
 	for _, player := range players {
@@ -268,42 +269,36 @@ func (world *World) tellAllButMe(room *Room, me *Player, fmt string, args ...int
 			client.tell(fmt, args...)
 		}
 	}
-
 }
 
-func doSay(world *World, client *Client, args CommandArgs) {
-	client.tell("You say, \"" + args.argString + "\"")
-
+func doSay(world *World, client *Client, cmd Command) {
+	client.tell("You say, \"" + cmd.args + "\"")
 	player := client.player
-	here := player.location
-
-	world.tellAllButMe(here, player, player.Name() + " says, \"" + args.argString + "\"")
+	world.tellAllButMe(player, player.Name() + " says, \"" + cmd.args + "\"")
 }
 
-func doQuit(world *World, client *Client, args CommandArgs) {
+func doQuit(world *World, client *Client, cmd Command) {
 	client.quitRequested = true
 }
 
-func doEmote(world *World, client *Client, args CommandArgs) {
-	client.tell(client.player.name + " " + args.argString)
+func doEmote(world *World, client *Client, cmd Command) {
+	client.tell(client.player.name + " " + cmd.args)
 }
 
-func doDesc(world *World, client *Client, args CommandArgs) {
+func doDesc(world *World, client *Client, cmd Command) {
 	player := client.player
 	here := player.location
-
-	here.description = args.argString
-
+	here.description = cmd.args
 	client.tell("Set.")
 }
 
-func doMove(world *World, client *Client, args CommandArgs) {
+func doMove(world *World, client *Client, cmd Command) {
 	player := client.player
 	here := player.location
 
 	// Try to find an exit with the correct name.
 	for exit := range here.exits.Iterator() {
-		if exit.Name() == args.argString {
+		if exit.Name() == cmd.args {
 			player.location = exit.(*Exit).destination
 			lookHere(world, client)
 			return
@@ -364,8 +359,8 @@ func lookHere(world *World, client *Client) {
 
 }
 
-func doLook(world *World, client *Client, args CommandArgs) {
-	if args.argString == "" {
+func doLook(world *World, client *Client, cmd Command) {
+	if cmd.args == "" {
 		lookHere(world, client)
 	} else {
 		// TODO: Refactor when there are objects
@@ -420,7 +415,7 @@ func connectionLoop(conn net.Conn) {
 
 	infoLog.Println("Disconnection from", conn.RemoteAddr())
 
-	world.tellAllButMe(client.player.location, client.player, client.player.Name() + " has disconnected.")
+	world.tellAllButMe(client.player, client.player.Name() + " has disconnected.")
 
 	client.player.awake = false
 	client.player.client = nil
