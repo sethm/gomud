@@ -3,9 +3,9 @@ package main
 import (
 	"bytes"
 	"net"
+	"regexp"
 	"testing"
 	"time"
-	"regexp"
 )
 
 func assertMatch(t *testing.T, expected string, match string) {
@@ -20,8 +20,8 @@ func assertMatch(t *testing.T, expected string, match string) {
 //
 
 type MockConn struct {
-	readBytes    [][]byte
-	writeBuffer  *bytes.Buffer
+	readBytes   [][]byte
+	writeBuffer *bytes.Buffer
 
 	readError        *error
 	closeAfterWrites int
@@ -68,7 +68,6 @@ func NewMockConn() *MockConn {
 	buffer := bytes.NewBuffer(make([]byte, 1024, 1024))
 	return &MockConn{readBytes: make([][]byte, 1024, 1024), writeBuffer: buffer}
 }
-
 
 // Automatically convert writtenBytes into a string
 func (conn MockConn) String() string {
@@ -241,7 +240,7 @@ func TestParseCommand(t *testing.T) {
 	den, _ := world.NewRoom("The Den")
 
 	world.NewExit(bedroom, "west", hall)
-	world.NewExit(bedroom, "say", den)    // Trying to be sneaky!
+	world.NewExit(bedroom, "say", den) // Trying to be sneaky!
 
 	player, _ := world.NewPlayer("bob", "foo", bedroom)
 	client.player = player
@@ -408,7 +407,7 @@ func TestDoSay(t *testing.T) {
 	jimConn := NewMockConn()
 	bobClient := NewClient(bobConn)
 	jimClient := NewClient(jimConn)
-	
+
 	hall, _ := world.NewRoom("The Hall")
 
 	world.NewPlayer("bob", "foo", hall)
@@ -430,7 +429,7 @@ func TestDoEmote(t *testing.T) {
 	jimConn := NewMockConn()
 	bobClient := NewClient(bobConn)
 	jimClient := NewClient(jimConn)
-	
+
 	hall, _ := world.NewRoom("The Hall")
 
 	world.NewPlayer("bob", "foo", hall)
@@ -465,7 +464,7 @@ func TestDoQuit(t *testing.T) {
 func TestDoLookShowsHereByDefault(t *testing.T) {
 	world := NewWorld()
 
-	bobConn:= NewMockConn()
+	bobConn := NewMockConn()
 	sallyConn := NewMockConn()
 	bobClient := NewClient(bobConn)
 	sallyClient := NewClient(sallyConn)
@@ -477,9 +476,9 @@ func TestDoLookShowsHereByDefault(t *testing.T) {
 
 	world.NewExit(hall, "east", den)
 	world.NewExit(den, "west", hall)
-	
+
 	world.NewRoom("The Den")
-	
+
 	world.NewPlayer("bob", "foo", hall)
 	world.NewPlayer("jim", "foo", hall)
 	world.NewPlayer("sally", "foo", hall)
@@ -501,5 +500,30 @@ func TestDoLookShowsHereByDefault(t *testing.T) {
 	assertMatch(t, "sally\r\n", bobConn.String())
 }
 
-func TestDoLookMeShowsMyDescription(t *testing.T) {
+func TestDoDigCreatesRoom(t *testing.T) {
+	world := NewWorld()
+	conn := NewMockConn()
+	client := NewClient(conn)
+	hall, _ := world.NewRoom("The Hall")
+	world.NewPlayer("bob", "foo", hall)
+
+	doConnect(world, client, Command{"connect", "bob", "foo"})
+
+	if len(world.rooms) != 1 {
+		t.Errorf("There should be only 1 room")
+	}
+
+	if len(world.exits) != 0 {
+		t.Errorf("There should be no exits.")
+	}
+
+	doDig(world, client, Command{"@dig", "east", "The Den"})
+
+	if len(world.rooms) != 2 {
+		t.Errorf("Den was not created.")
+	}
+
+	if len(world.exits) != 1 {
+		t.Errorf("Exit was not created.")
+	}
 }

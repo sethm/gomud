@@ -393,9 +393,29 @@ func doEmote(world *World, client *Client, cmd Command) {
 
 func doDesc(world *World, client *Client, cmd Command) {
 	player := client.player
+	target := cmd.target
+	desc := cmd.args
 	here := player.location
-	here.description = cmd.args
-	client.tell("Set.")
+
+	if target == "" || desc == "" {
+		client.tell("Describe what?")
+		return
+	}
+
+	if target == "me" {
+		client.player.description = desc
+		client.tell("Description set.")
+		return
+	}
+
+	if target == "here" && here != nil {
+		here.description = desc
+		client.tell("Description set.")
+		return
+	}
+
+	client.tell("I don't see that here.")
+	return
 }
 
 func doDig(world *World, client *Client, cmd Command) {
