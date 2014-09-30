@@ -42,8 +42,8 @@ var commandHandlers = HandlerMap{
 	"emote":     {1, false, true, doEmote},
 	"go":        {1, false, true, doMove},
 	"help":      {0, false, true, doHelp},
-	"look":      {1, false, true, doLook},
-	"l":         {1, false, true, doLook},
+	"look":      {2, false, true, doLook},
+	"l":         {2, false, true, doLook},
 	"move":      {1, false, true, doMove},
 	"quit":      {0, true, true, doQuit},
 	"say":       {1, false, true, doSay},
@@ -120,6 +120,14 @@ type Player struct {
 	location    *Room
 	awake       bool
 	client      *Client
+}
+
+func (e *Exit) Description() string {
+	if e.description == "" {
+		return "You see nothing special."
+	}
+
+	return e.description
 }
 
 func (p *Player) Description() string {
@@ -350,9 +358,14 @@ func doConnect(world *World, client *Client, cmd Command) {
 
 	for _, player := range world.players {
 		if player.normalName == normalName {
-
 			if player.password != passwordHash {
 				client.tell("Incorrect password.")
+				return
+			}
+
+			// Is the player already connected?
+			if player.client != nil {
+				client.tell("Already connected!")
 				return
 			}
 
@@ -412,6 +425,15 @@ func doDesc(world *World, client *Client, cmd Command) {
 		here.description = desc
 		client.tell("Description set.")
 		return
+	}
+
+	// Maybe it's an exit.
+	for _, e := range here.exits {
+		if e.name == target {
+			e.description = desc
+			client.tell("Description set.")
+			return
+		}
 	}
 
 	client.tell("I don't see that here.")
@@ -532,18 +554,36 @@ func (world *World) lookHere(client *Client) {
 }
 
 func doLook(world *World, client *Client, cmd Command) {
-	if cmd.args == "" || cmd.args == "here" {
+	if cmd.target == "" || cmd.target == "here" {
 		world.lookHere(client)
 		return
 	}
 
-	if cmd.args == "me" {
+	if cmd.target == "me" {
 		client.tell(client.player.Description())
 		return
 	}
 
-	client.tell("I don't see that here.")
+	player := client.player
+	here := player.location
 
+	// Maybe it's a player?
+	for _, p := range here.players {
+		if cmd.target == p.name {
+			client.tell(p.Description())
+			return
+		}
+	}
+
+	// Not a player, maybe an exit
+	for _, e := range here.exits {
+		if cmd.target == e.name {
+			client.tell(e.Description())
+			return
+		}
+	}
+
+	client.tell("I don't see that here.")
 }
 
 func welcome(client *Client) {

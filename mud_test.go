@@ -336,9 +336,34 @@ func TestDoConnectShouldWakeUpPlayers(t *testing.T) {
 	}
 }
 
+func TestDoConnectShouldNotConnectMultipleTimes(t *testing.T) {
+	world := NewWorld()
+
+	connA := NewMockConn()
+	clientA := NewClient(connA)
+
+	connB := NewMockConn()
+	clientB := NewClient(connB)
+
+	hall, _ := world.NewRoom("The Hall")
+	bob, _ := world.NewPlayer("bob", "foo", hall)
+
+	doConnect(world, clientA, Command{"connect", "bob", "foo"})
+
+	if clientA.player != bob || bob.client != clientA {
+		t.Errorf("Connecting should have linked the client and the player")
+	}
+
+	doConnect(world, clientB, Command{"connect", "bob", "foo"})
+
+	if clientB.player == bob || bob.client == clientB {
+		t.Errorf("Should NOT be able to connect to the same player twice.")
+	}
+}
+
 func TestDoConnectDoesNothingIfPlayerNotFound(t *testing.T) {
 	conn := NewMockConn()
-	client := NewClient(conn) // &Client{conn: conn}
+	client := NewClient(conn)
 	world := NewWorld()
 	hall, _ := world.NewRoom("The Hall")
 	bob, _ := world.NewPlayer("bob", "foo", hall)
@@ -354,7 +379,7 @@ func TestDoConnectDoesNothingIfPlayerNotFound(t *testing.T) {
 
 func TestDoConnectWithoutPasswordFails(t *testing.T) {
 	conn := NewMockConn()
-	client := NewClient(conn) // &Client{conn: conn}
+	client := NewClient(conn)
 	world := NewWorld()
 	hall, _ := world.NewRoom("The Hall")
 	bob, _ := world.NewPlayer("bob", "foo", hall)
