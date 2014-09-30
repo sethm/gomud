@@ -246,7 +246,7 @@ func TestParseCommand(t *testing.T) {
 	client.player = player
 
 	for i, cmd := range commandInputs {
-		command := world.parseCommand(client, cmd)
+		command := parseCommand(client, cmd)
 
 		if command != expectedCommands[i] {
 			t.Errorf("%d: Expected args to be equal. Actual: %s", i, command)
@@ -550,5 +550,22 @@ func TestDoDigCreatesRoom(t *testing.T) {
 
 	if len(world.exits) != 1 {
 		t.Errorf("Exit was not created.")
+	}
+}
+
+
+func TestDoDescriptionUpdatesDescription(t *testing.T) {
+	world := NewWorld()
+	conn := NewMockConn()
+	client := NewClient(conn)
+	hall, _ := world.NewRoom("The Hall")
+	bob, _ := world.NewPlayer("bob", "foo", hall)
+
+	doConnect(world, client, Command{"connect", "bob", "foo"})
+
+	doDesc(world, client, Command{"@desc", "me", "Bob is really tall."})
+
+	if bob.description != "Bob is really tall." {
+		t.Errorf("Bob's description was not updated: " + bob.Description())
 	}
 }

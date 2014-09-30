@@ -1,15 +1,12 @@
 package main
 
 import (
-	"crypto/sha512"
-	"errors"
 	"fmt"
 	"io"
 	"log"
 	"net"
 	"os"
 	"os/signal"
-	"strconv"
 	"strings"
 	"sync"
 	"syscall"
@@ -22,6 +19,18 @@ var debugLog, infoLog, errorLog *log.Logger
 var idGen func() int = KeyGen()
 
 type CommandHandler func(*World, *Client, Command)
+
+type Flags int
+
+const (
+	God Flags = iota
+	Wizard
+	Builder
+	Programmer
+	Locked
+	TeleportOK
+	BuildOK
+)
 
 type CommandDesc struct {
 	argCount int
@@ -81,86 +90,6 @@ type Client struct {
 	quitRequested bool
 }
 
-//
-// Exits link two rooms together
-//
-type Exit struct {
-	sync.RWMutex
-	key         int
-	name        string
-	normalName  string
-	description string
-	owner       *Player
-	destination *Room
-}
-
-//
-// A room is a place in the world.
-//
-type Room struct {
-	sync.RWMutex
-	key         int
-	name        string
-	description string
-	owner       *Player
-	exits       map[int]*Exit
-	players     map[int]*Player
-}
-
-//
-// A player interacts with the world
-//
-type Player struct {
-	sync.RWMutex
-	key         int
-	name        string
-	password    [64]byte
-	description string
-	normalName  string
-	location    *Room
-	awake       bool
-	client      *Client
-}
-
-func (e *Exit) Description() string {
-	if e.description == "" {
-		return "You see nothing special."
-	}
-
-	return e.description
-}
-
-func (p *Player) Description() string {
-	if p.description == "" {
-		return "You see nothing special."
-	}
-
-	return p.description
-}
-
-func (p *Player) SetPassword(raw string) {
-	p.password = sha512.Sum512([]byte(raw))
-}
-
-//
-// The world is the sum total of all objects
-//
-type World struct {
-	players map[int]*Player
-	rooms   map[int]*Room
-	exits   map[int]*Exit
-}
-
-func NewWorld() *World {
-	return &World{make(map[int]*Player), make(map[int]*Room), make(map[int]*Exit)}
-}
-
-func (w *World) NewRoom(name string) (r *Room, err error) {
-	r = &Room{key: idGen(), name: name, exits: make(map[int]*Exit), players: make(map[int]*Player)}
-	w.rooms[r.key] = r
-	return
-}
-
 func NewClient(conn net.Conn) *Client {
 	return &Client{conn: conn, quitRequested: false}
 }
@@ -170,68 +99,8 @@ func (c *Client) tell(msg string, args ...interface{}) {
 	c.conn.Write([]byte(s))
 }
 
-func (w *World) NewPlayer(name string, password string, location *Room) (p *Player, err error) {
-	normalName := strings.ToLower(name)
-
-	for _, player := range w.players {
-		if player.normalName == normalName {
-			err = errors.New("User already exists")
-			return
-		}
-	}
-
-	p = &Player{key: idGen(), name: name, normalName: normalName}
-	p.SetPassword(password)
-	w.players[p.key] = p
-	w.MovePlayer(p, location)
-
-	return
-}
-
-// Move a player to a new room. Returns the player's new location,
-// and an error if the player could not be moved.
-func (w *World) MovePlayer(p *Player, d *Room) (*Room, error) {
-	p.Lock()
-	defer p.Unlock()
-
-	d.Lock()
-	defer d.Unlock()
-
-	oldRoom := p.location
-
-	if oldRoom != nil {
-		oldRoom.Lock()
-		defer oldRoom.Unlock()
-
-		delete(oldRoom.players, p.key)
-	}
-
-	p.location = d
-	d.players[p.key] = p
-
-	// Error may become non-nil in the future, when exits and rooms
-	// have guards / locks
-
-	return d, nil
-}
-
-func (w *World) NewExit(source *Room, name string, destination *Room) (e *Exit, err error) {
-	for _, exit := range source.exits {
-		if exit.name == name {
-			err = errors.New("An exit with that name already exists.")
-			return
-		}
-	}
-
-	e = &Exit{key: idGen(), name: name, destination: destination}
-	w.exits[e.key] = e
-	source.exits[e.key] = e
-
-	return
-}
-
 // TODO: I feel like this needs improvement.
-func (w *World) parseCommand(client *Client, line string) Command {
+func parseCommand(client *Client, line string) Command {
 	// The user may have typed `"foo`, which we want to interpret
 	// as "say foo".
 	if strings.HasPrefix(line, "\"") {
@@ -275,317 +144,6 @@ func (w *World) parseCommand(client *Client, line string) Command {
 	return Command{verb: verb, args: tokenized[1]}
 }
 
-func (w *World) handleCommand(handlerMap *HandlerMap, client *Client, command Command) {
-	description, exists := (*handlerMap)[command.verb]
-
-	if !exists {
-		client.tell("Huh?")
-		return
-	}
-
-	// Are we pre-auth?
-	if client.player == nil && description.preAuth {
-		// OK to handle.
-		description.handler(w, client, command)
-		return
-	}
-
-	// ... or are we post-auth?
-	if client.player != nil && description.postAuth {
-		description.handler(w, client, command)
-		return
-	}
-
-	client.tell("Huh?")
-}
-
-//
-// Handlers
-//
-
-func doNewplayer(world *World, client *Client, cmd Command) {
-
-	if cmd.target == "" || cmd.args == "" {
-		client.tell("Try: newplayer <player> <password>")
-		return
-	}
-
-	normalName := strings.ToLower(cmd.target)
-
-	for _, player := range world.players {
-		if player.normalName == normalName {
-			client.tell("Sorry, that name is in use.")
-			return
-		}
-	}
-
-	// Ugh, what a kludge. Need a proper framework for defining
-	// player creation room
-	startingRoom, exists := world.rooms[1]
-	if !exists {
-		client.tell("Sorry, we can't create any players right now.")
-		return
-	}
-
-	player, err := world.NewPlayer(cmd.target, cmd.args, startingRoom)
-
-	if err != nil {
-		client.tell("Sorry, we can't create any players right now.")
-		return
-	}
-
-	world.connectPlayer(client, player)
-}
-
-func (world *World) connectPlayer(client *Client, player *Player) {
-	client.player = player
-	client.player.awake = true
-	client.player.client = client
-	client.tell("Welcome, %s!", player.name)
-	world.lookHere(client)
-	world.tellAllButMe(client.player, player.name+" has connected.")
-}
-
-func doConnect(world *World, client *Client, cmd Command) {
-
-	if cmd.target == "" || cmd.args == "" {
-		client.tell("Try: connect <player> <password>")
-		return
-	}
-
-	normalName := strings.ToLower(cmd.target)
-	passwordHash := sha512.Sum512([]byte(cmd.args))
-
-	for _, player := range world.players {
-		if player.normalName == normalName {
-			if player.password != passwordHash {
-				client.tell("Incorrect password.")
-				return
-			}
-
-			// Is the player already connected?
-			if player.client != nil {
-				client.tell("Already connected!")
-				return
-			}
-
-			world.connectPlayer(client, player)
-			return
-		}
-	}
-
-	client.tell("No such player!")
-	return
-
-}
-
-func (world *World) tellAllButMe(me *Player, fmt string, args ...interface{}) {
-	for _, player := range me.location.players {
-		client := player.client
-		if client != nil && client.player != me {
-			client.tell(fmt, args...)
-		}
-	}
-}
-
-func doSay(world *World, client *Client, cmd Command) {
-	client.tell("You say, \"" + cmd.args + "\"")
-	player := client.player
-	world.tellAllButMe(player, player.name+" says, \""+cmd.args+"\"")
-}
-
-func doQuit(world *World, client *Client, cmd Command) {
-	client.quitRequested = true
-}
-
-func doEmote(world *World, client *Client, cmd Command) {
-	player := client.player
-	client.tell(player.name + " " + cmd.args)
-	world.tellAllButMe(player, player.name+" "+cmd.args)
-}
-
-func doDesc(world *World, client *Client, cmd Command) {
-	player := client.player
-	target := cmd.target
-	desc := cmd.args
-	here := player.location
-
-	if target == "" || desc == "" {
-		client.tell("Describe what?")
-		return
-	}
-
-	if target == "me" {
-		client.player.description = desc
-		client.tell("Description set.")
-		return
-	}
-
-	if target == "here" && here != nil {
-		here.description = desc
-		client.tell("Description set.")
-		return
-	}
-
-	// Maybe it's an exit.
-	for _, e := range here.exits {
-		if e.name == target {
-			e.description = desc
-			client.tell("Description set.")
-			return
-		}
-	}
-
-	client.tell("I don't see that here.")
-	return
-}
-
-func doDig(world *World, client *Client, cmd Command) {
-	here := client.player.location
-	exitName := cmd.target
-	roomName := cmd.args
-
-	if exitName == "" || roomName == "" {
-		client.tell("Dig what?")
-		return
-	}
-
-	room, err := world.NewRoom(roomName)
-
-	if err != nil {
-		client.tell("You can't do that!")
-		return
-	}
-
-	world.NewExit(here, exitName, room)
-
-	client.tell("Dug.")
-}
-
-func doLink(world *World, client *Client, cmd Command) {
-	here := client.player.location
-	exitName := cmd.target
-
-	if exitName == "" || cmd.args == "" {
-		client.tell("Dig what?")
-		return
-	}
-
-	roomNumber, err := strconv.Atoi(cmd.args)
-	if err != nil {
-		client.tell("I didn't understand that room number.")
-		return
-	}
-
-	room, exists := world.rooms[roomNumber]
-
-	if !exists {
-		client.tell("That destination doesn't exist.")
-		return
-	}
-
-	world.NewExit(here, exitName, room)
-
-	client.tell("Linked.")
-}
-
-func doTell(world *World, client *Client, cmd Command) {
-	client.tell("Not Implemented Yet.")
-}
-
-func doMove(world *World, client *Client, cmd Command) {
-	player := client.player
-	here := player.location
-
-	// Try to find an exit with the correct name.
-	for _, exit := range here.exits {
-		if exit.name == cmd.args {
-			world.MovePlayer(player, exit.destination)
-			world.lookHere(client)
-			return
-		}
-	}
-
-	client.tell("There's no exit in that direction!")
-}
-
-func doHelp(world *World, client *Client, cmd Command) {
-	client.tell("Welcome to this experimental MUD!")
-	client.tell("")
-	client.tell("Basic commands are:")
-	client.tell("   go <exit>                   Move to a new room")
-	client.tell("   <direction>                 Move to a new room")
-	client.tell("   @dig <exit> <name>          Dig a new room")
-	client.tell("   @link <exit> <room_number>  Create a new exit to room #")
-	client.tell("   quit                        Leave the game")
-	client.tell("")
-	client.tell("")
-
-}
-
-func (world *World) lookHere(client *Client) {
-	player := client.player
-	here := player.location
-	client.tell("%s (#%d)", here.name, here.key)
-
-	if here.description != "" {
-		client.tell("\n" + here.description + "\n")
-	}
-
-	if len(here.exits) > 0 {
-		client.tell("You can see the following exits:")
-		for _, exit := range here.exits {
-			client.tell("  %s", exit.name)
-		}
-	}
-
-	if len(here.players) > 1 {
-		client.tell("The following players are here:")
-		for _, p := range here.players {
-			if p.normalName != player.normalName {
-				if p.awake {
-					client.tell("  %s", p.name)
-				} else {
-					client.tell("  %s (asleep)", p.name)
-				}
-			}
-		}
-	}
-}
-
-func doLook(world *World, client *Client, cmd Command) {
-	if cmd.target == "" || cmd.target == "here" {
-		world.lookHere(client)
-		return
-	}
-
-	if cmd.target == "me" {
-		client.tell(client.player.Description())
-		return
-	}
-
-	player := client.player
-	here := player.location
-
-	// Maybe it's a player?
-	for _, p := range here.players {
-		if cmd.target == p.name {
-			client.tell(p.Description())
-			return
-		}
-	}
-
-	// Not a player, maybe an exit
-	for _, e := range here.exits {
-		if cmd.target == e.name {
-			client.tell(e.Description())
-			return
-		}
-	}
-
-	client.tell("I don't see that here.")
-}
-
 func welcome(client *Client) {
 	client.tell("-----------------------------------------------------")
 	client.tell("Welcome to this experimental MUD!")
@@ -623,7 +181,7 @@ func connectionLoop(conn net.Conn) {
 		line := strings.TrimSpace(string(linebuf[:n]))
 
 		if len(line) > 0 {
-			command := world.parseCommand(client, line)
+			command := parseCommand(client, line)
 			debugLog.Println("Parsed command:", command)
 			if command.verb != "" {
 				world.handleCommand(&commandHandlers, client, command)
