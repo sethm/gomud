@@ -94,7 +94,7 @@ func NewClient(conn net.Conn) *Client {
 	return &Client{conn: conn, quitRequested: false}
 }
 
-func (c *Client) tell(msg string, args ...interface{}) {
+func (c *Client) Tell(msg string, args ...interface{}) {
 	s := fmt.Sprintf(msg+"\r\n", args...)
 	c.conn.Write([]byte(s))
 }
@@ -145,15 +145,15 @@ func parseCommand(client *Client, line string) Command {
 }
 
 func welcome(client *Client) {
-	client.tell("-----------------------------------------------------")
-	client.tell("Welcome to this experimental MUD!")
-	client.tell("")
-	client.tell("To create a new player: newplayer <name> <password>")
-	client.tell("To connect as a player: connect <name> <password>")
-	client.tell("To leave the game:      quit")
-	client.tell("-----------------------------------------------------")
-	client.tell("")
-	client.tell("")
+	client.Tell("-----------------------------------------------------")
+	client.Tell("Welcome to this experimental MUD!")
+	client.Tell("")
+	client.Tell("To create a new player: newplayer <name> <password>")
+	client.Tell("To connect as a player: connect <name> <password>")
+	client.Tell("To leave the game:      quit")
+	client.Tell("-----------------------------------------------------")
+	client.Tell("")
+	client.Tell("")
 }
 
 //
@@ -168,7 +168,7 @@ func connectionLoop(conn net.Conn) {
 	// Loop on input and handle it.
 	for {
 		// // Uncomment if we want a prompt...
-		// client.tell("mud> ")
+		// client.Tell("mud> ")
 		n, err := conn.Read(linebuf)
 
 		if err != nil {
@@ -196,7 +196,7 @@ func connectionLoop(conn net.Conn) {
 	infoLog.Println("Disconnection from", conn.RemoteAddr())
 
 	if client.player != nil {
-		world.tellAllButMe(client.player, client.player.name+" has disconnected.")
+		world.TellAllButMe(client.player, client.player.name+" has disconnected.")
 		client.player.awake = false
 		client.player.client = nil
 		client.player = nil

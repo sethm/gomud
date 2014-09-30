@@ -147,7 +147,7 @@ func TestNewPlayerCantReuseNames(t *testing.T) {
 func TestTell(t *testing.T) {
 	conn := NewMockConn()
 	client := NewClient(conn) // &Client{conn: conn}
-	client.tell("Hello, world!")
+	client.Tell("Hello, world!")
 
 	assertMatch(t, "Hello, world!\r\n", conn.String())
 }
@@ -552,7 +552,6 @@ func TestDoDigCreatesRoom(t *testing.T) {
 		t.Errorf("Exit was not created.")
 	}
 }
-
 
 func TestDoDescriptionUpdatesDescription(t *testing.T) {
 	world := NewWorld()

@@ -1,8 +1,8 @@
 package main
 
 import (
-	"strings"
 	"errors"
+	"strings"
 )
 
 //
@@ -21,7 +21,7 @@ func NewWorld() *World {
 func (w *World) NewRoom(name string) (r *Room, err error) {
 	normalName := strings.ToLower(name)
 
-	r = &Room{Object:Object{key: idGen(), name: name, normalName: normalName},
+	r = &Room{Object: Object{key: idGen(), name: name, normalName: normalName},
 		exits: make(map[int]*Exit), players: make(map[int]*Player)}
 	w.rooms[r.key] = r
 	return
@@ -37,7 +37,7 @@ func (w *World) NewPlayer(name string, password string, location *Room) (p *Play
 		}
 	}
 
-	p = &Player{Object:Object{key: idGen()}}
+	p = &Player{Object: Object{key: idGen()}}
 
 	p.SetName(name)
 	p.SetPassword(password)
@@ -75,14 +75,17 @@ func (w *World) MovePlayer(p *Player, d *Room) (*Room, error) {
 }
 
 func (w *World) NewExit(source *Room, name string, destination *Room) (e *Exit, err error) {
+	normalName := strings.ToLower(name)
+
 	for _, exit := range source.exits {
-		if exit.name == name {
+		if exit.NormalName() == normalName {
 			err = errors.New("An exit with that name already exists.")
 			return
 		}
 	}
 
-	e = &Exit{Object:Object{key: idGen(), name: name}, destination: destination}
+	e = &Exit{Object: Object{key: idGen()}, destination: destination}
+	e.SetName(name)
 	w.exits[e.key] = e
 	source.exits[e.key] = e
 
@@ -93,16 +96,17 @@ func (world *World) connectPlayer(client *Client, player *Player) {
 	client.player = player
 	client.player.awake = true
 	client.player.client = client
-	client.tell("Welcome, %s!", player.name)
-	world.lookHere(client)
-	world.tellAllButMe(client.player, player.name+" has connected.")
+	client.Tell("Welcome, %s!", player.name)
+	// world.lookHere(client)
+	client.lookAt(client.player.location)
+	world.TellAllButMe(client.player, player.name+" has connected.")
 }
 
 func (w *World) handleCommand(handlerMap *HandlerMap, client *Client, command Command) {
 	description, exists := (*handlerMap)[command.verb]
 
 	if !exists {
-		client.tell("Huh?")
+		client.Tell("Huh?")
 		return
 	}
 
@@ -119,24 +123,24 @@ func (w *World) handleCommand(handlerMap *HandlerMap, client *Client, command Co
 		return
 	}
 
-	client.tell("Huh?")
+	client.Tell("Huh?")
 }
 
-func (world *World) tellAllButMe(me *Player, fmt string, args ...interface{}) {
+func (world *World) TellAllButMe(me *Player, fmt string, args ...interface{}) {
 	for _, player := range me.location.players {
 		client := player.client
 		if client != nil && client.player != me {
-			client.tell(fmt, args...)
+			client.Tell(fmt, args...)
 		}
 	}
 }
 
 func (w *World) FindTarget(c *Client, cmd Command) (o Objecter, err error) {
-	target := cmd.target
+	target := strings.ToLower(cmd.target)
 	here := c.player.location
 
-	if target == "" {
-		err = errors.New("No target")
+	if target == "" || target == "here" {
+		o = here
 		return
 	}
 
@@ -145,15 +149,18 @@ func (w *World) FindTarget(c *Client, cmd Command) (o Objecter, err error) {
 		return
 	}
 
-	if target == "here" {
-		o = here
-		return
-	}
-
 	// Maybe it's an exit
 	for _, e := range here.exits {
-		if e.name == target {
+		if e.NormalName() == target {
 			o = e
+			return
+		}
+	}
+
+	// Maybe it's a player
+	for _, p := range here.players {
+		if p.NormalName() == target {
+			o = p
 			return
 		}
 	}
@@ -161,30 +168,33 @@ func (w *World) FindTarget(c *Client, cmd Command) (o Objecter, err error) {
 	return nil, errors.New("Target not found")
 }
 
-func (world *World) lookHere(client *Client) {
+func (client *Client) lookAt(o Objecter) {
 	player := client.player
-	here := player.location
-	client.tell("%s (#%d)", here.name, here.key)
 
-	if here.description != "" {
-		client.tell("\n" + here.description + "\n")
-	}
+	client.Tell("%s (#%d)", o.Name(), o.Key())
+	client.Tell(o.Description())
 
-	if len(here.exits) > 0 {
-		client.tell("You can see the following exits:")
-		for _, exit := range here.exits {
-			client.tell("  %s", exit.name)
+	// If the Object is a room, we want more info.
+	switch o.(type) {
+	case *Room:
+		r := o.(*Room)
+
+		if len(r.exits) > 0 {
+			client.Tell("You can see the following exits:")
+			for _, exit := range r.exits {
+				client.Tell("  %s", exit.name)
+			}
 		}
-	}
 
-	if len(here.players) > 1 {
-		client.tell("The following players are here:")
-		for _, p := range here.players {
-			if p.normalName != player.normalName {
-				if p.awake {
-					client.tell("  %s", p.name)
-				} else {
-					client.tell("  %s (asleep)", p.name)
+		if len(r.players) > 1 {
+			client.Tell("The following players are here:")
+			for _, p := range r.players {
+				if p.NormalName() != player.NormalName() {
+					if p.awake {
+						client.Tell("  %s", p.name)
+					} else {
+						client.Tell("  %s (asleep)", p.name)
+					}
 				}
 			}
 		}
