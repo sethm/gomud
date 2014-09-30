@@ -20,7 +20,7 @@ func NewWorld() *World {
 
 func (w *World) NewRoom(name string) (r *Room, err error) {
 	normalName := strings.ToLower(name)
-	
+
 	r = &Room{Object:Object{key: idGen(), name: name, normalName: normalName},
 		exits: make(map[int]*Exit), players: make(map[int]*Player)}
 	w.rooms[r.key] = r
@@ -31,13 +31,15 @@ func (w *World) NewPlayer(name string, password string, location *Room) (p *Play
 	normalName := strings.ToLower(name)
 
 	for _, player := range w.players {
-		if player.normalName == normalName {
+		if player.NormalName() == normalName {
 			err = errors.New("User already exists")
 			return
 		}
 	}
 
-	p = &Player{Object:Object{key: idGen(), name: name, normalName: normalName}}
+	p = &Player{Object:Object{key: idGen()}}
+
+	p.SetName(name)
 	p.SetPassword(password)
 	w.players[p.key] = p
 	w.MovePlayer(p, location)
