@@ -103,6 +103,11 @@ func doDesc(world *World, client *Client, cmd Command) {
 		return
 	}
 
+	if client.player != target && client.player != target.Owner() {
+		client.Tell("You can't do that.")
+		return
+	}
+
 	target.SetDescription(desc)
 	client.Tell("Description set.")
 	return

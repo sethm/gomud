@@ -1,8 +1,8 @@
 package main
 
 import (
-	"sync"
 	"strings"
+	"sync"
 )
 
 //
@@ -15,6 +15,7 @@ type Object struct {
 	normalName  string
 	description string
 	flags       Flags
+	owner       *Player
 }
 
 //
@@ -22,24 +23,15 @@ type Object struct {
 //
 type Objecter interface {
 	Key() int
-
 	Name() string
 	SetName(s string)
-
 	NormalName() string
-
 	Description() string
 	SetDescription(s string)
-
 	Flags() Flags
 	SetFlags(f Flags)
-}
-
-//
-// Some objects are also ownable.
-//
-type Ownable struct {
-	owner       *Player
+	Owner() *Player
+	SetOwner(p *Player)
 }
 
 //
@@ -81,4 +73,12 @@ func (o *Object) Flags() Flags {
 
 func (o *Object) SetFlags(f Flags) {
 	o.flags = f
+}
+
+func (o *Object) Owner() *Player {
+	return o.owner
+}
+
+func (o *Object) SetOwner(p *Player) {
+	o.owner = p
 }

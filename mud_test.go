@@ -530,7 +530,8 @@ func TestDoDigCreatesRoom(t *testing.T) {
 	conn := NewMockConn()
 	client := NewClient(conn)
 	hall, _ := world.NewRoom("The Hall")
-	world.NewPlayer("bob", "foo", hall)
+	bob, _ := world.NewPlayer("bob", "foo", hall)
+	hall.SetOwner(bob)
 
 	doConnect(world, client, Command{"connect", "bob", "foo"})
 
@@ -559,6 +560,7 @@ func TestDoDescriptionUpdatesDescription(t *testing.T) {
 	client := NewClient(conn)
 	hall, _ := world.NewRoom("The Hall")
 	bob, _ := world.NewPlayer("bob", "foo", hall)
+	hall.SetOwner(bob)
 
 	doConnect(world, client, Command{"connect", "bob", "foo"})
 
@@ -567,4 +569,32 @@ func TestDoDescriptionUpdatesDescription(t *testing.T) {
 	if bob.description != "Bob is really tall." {
 		t.Errorf("Bob's description was not updated: " + bob.Description())
 	}
+}
+
+func TestDoDescriptionOnlyUpdatesDescIfPlayerIsTheOwner(t *testing.T) {
+	world := NewWorld()
+	bobConn := NewMockConn()
+	bobClient := NewClient(bobConn)
+	jimConn := NewMockConn()
+	jimClient := NewClient(jimConn)
+	hall, _ := world.NewRoom("The Hall")
+	hall.SetDescription("The Hall Is Dark")
+	world.NewPlayer("bob", "foo", hall)
+	jim, _ := world.NewPlayer("jim", "foo", hall)
+	hall.SetOwner(jim)
+
+	doConnect(world, bobClient, Command{"connect", "bob", "foo"})
+	doConnect(world, jimClient, Command{"connect", "jim", "foo"})
+	doDesc(world, bobClient, Command{"@desc", "here", "The Hallway is long"})
+
+	if hall.Description() != "The Hall Is Dark"	{
+		t.Errorf("Bob should not be able to change the desc of the room.")
+	}
+
+	doDesc(world, jimClient, Command{"@desc", "here", "The Hallway is short"})
+
+	if hall.Description() != "The Hallway is short" {
+		t.Errorf("Jim should be able to change the desc of the room.")
+	}
+	
 }

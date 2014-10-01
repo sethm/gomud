@@ -5,7 +5,6 @@ package main
 //
 type Exit struct {
 	Object
-	Ownable
 	destination *Room
 }
 
@@ -14,8 +13,6 @@ type Exit struct {
 //
 type Room struct {
 	Object
-	Ownable
-	exits       map[int]*Exit
-	players     map[int]*Player
+	exits   map[int]*Exit
+	players map[int]*Player
 }
-
