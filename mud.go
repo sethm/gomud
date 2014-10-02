@@ -222,14 +222,17 @@ func initWorld() {
 	world.NewPlayer("Wizard", "xyzzy", hall)
 }
 
+func init() {
+	debugLog = log.New(os.Stdout, "[DEBUG] ", log.Ldate|log.Ltime|log.Lshortfile)
+	infoLog = log.New(os.Stdout, "[INFO] ", log.Ldate|log.Ltime|log.Lshortfile)
+	errorLog = log.New(os.Stderr, "[ERROR] ", log.Ldate|log.Ltime|log.Lshortfile)
+}
+
 //
 // Main entry point
 //
 func main() {
-	debugLog = log.New(os.Stdout, "[DEBUG] ", log.Ldate|log.Ltime|log.Lshortfile)
-	infoLog = log.New(os.Stdout, "[INFO] ", log.Ldate|log.Ltime|log.Lshortfile)
-	errorLog = log.New(os.Stderr, "[ERROR] ", log.Ldate|log.Ltime|log.Lshortfile)
-
+	// Set up the SIGTERM signal handler
 	sigs := make(chan os.Signal, 2)
 	signal.Notify(sigs, os.Interrupt, syscall.SIGTERM)
 	stopRequested := make(chan bool)
@@ -239,6 +242,15 @@ func main() {
 		infoLog.Println("SIGTERM received.")
 		stopRequested <- true
 	}()
+
+	infoLog.Println("Loading world...")
+
+	initWorld()
+
+	infoLog.Println("World initialized with",
+		len(world.rooms), "room(s),",
+		len(world.players), "player(s), and",
+		len(world.exits), "exit(s)")
 
 	infoLog.Println("Starting server...")
 
@@ -250,13 +262,6 @@ func main() {
 	}
 
 	infoLog.Println("Server listening on port", PORT)
-
-	initWorld()
-
-	infoLog.Println("World initialized with",
-		len(world.rooms), "room(s),",
-		len(world.players), "player(s), and",
-		len(world.exits), "exit(s)")
 
 	go func() {
 		for {
