@@ -1,16 +1,16 @@
 package main
 
-import 	"crypto/sha512"
+import "crypto/sha512"
 
 //
 // A player interacts with the world
 //
 type Player struct {
 	Object
-	password    [64]byte
-	location    *Room
-	awake       bool
-	client      *Client
+	password [64]byte
+	location *Room
+	awake    bool
+	client   *Client
 }
 
 func (p *Player) SetPassword(raw string) {

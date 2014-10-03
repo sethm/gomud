@@ -167,36 +167,3 @@ func (w *World) FindTarget(c *Client, cmd Command) (o Objecter, err error) {
 
 	return nil, errors.New("Target not found")
 }
-
-func (client *Client) lookAt(o Objecter) {
-	player := client.player
-
-	client.Tell("%s (#%d)", o.Name(), o.Key())
-	client.Tell(o.Description())
-
-	// If the Object is a room, we want more info.
-	switch o.(type) {
-	case *Room:
-		r := o.(*Room)
-
-		if len(r.exits) > 0 {
-			client.Tell("You can see the following exits:")
-			for _, exit := range r.exits {
-				client.Tell("  %s", exit.name)
-			}
-		}
-
-		if len(r.players) > 1 {
-			client.Tell("The following players are here:")
-			for _, p := range r.players {
-				if p.NormalName() != player.NormalName() {
-					if p.awake {
-						client.Tell("  %s", p.name)
-					} else {
-						client.Tell("  %s (asleep)", p.name)
-					}
-				}
-			}
-		}
-	}
-}

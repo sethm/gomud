@@ -20,18 +20,6 @@ var idGen func() int = KeyGen()
 
 type CommandHandler func(*World, *Client, Command)
 
-type Flags int
-
-const (
-	God Flags = iota
-	Wizard
-	Builder
-	Programmer
-	Locked
-	TeleportOK
-	BuildOK
-)
-
 type CommandDesc struct {
 	argCount int
 	preAuth  bool
@@ -47,6 +35,8 @@ var commandHandlers = HandlerMap{
 	"@help":     {0, false, true, doHelp},
 	"@link":     {2, false, true, doLink},
 	"connect":   {2, true, false, doConnect},
+	"examine":   {2, false, true, doExamine},
+	"ex":        {2, false, true, doExamine},
 	"newplayer": {2, true, false, doNewplayer},
 	"emote":     {1, false, true, doEmote},
 	"go":        {1, false, true, doMove},
@@ -56,6 +46,7 @@ var commandHandlers = HandlerMap{
 	"move":      {1, false, true, doMove},
 	"quit":      {0, true, true, doQuit},
 	"say":       {1, false, true, doSay},
+	"@set":      {2, false, true, doSet},
 	"tell":      {2, false, true, doTell},
 	"walk":      {1, false, true, doMove},
 }
@@ -97,6 +88,47 @@ func NewClient(conn net.Conn) *Client {
 func (c *Client) Tell(msg string, args ...interface{}) {
 	s := fmt.Sprintf(msg+"\r\n", args...)
 	c.conn.Write([]byte(s))
+}
+
+func (client *Client) examine(o Objecter) {
+	client.Tell("%s (#%d)", o.Name(), o.Key())
+
+	if o.Owner() != nil {
+		client.Tell("Owner: %s (#%d)", o.Owner().Name(), o.Owner().Key())
+	}
+}
+
+func (client *Client) lookAt(o Objecter) {
+	player := client.player
+
+	client.Tell("%s (#%d)", o.Name(), o.Key())
+	client.Tell(o.Description())
+
+	// If the Object is a room, we want more info.
+	switch o.(type) {
+	case *Room:
+		r := o.(*Room)
+
+		if len(r.exits) > 0 {
+			client.Tell("You can see the following exits:")
+			for _, exit := range r.exits {
+				client.Tell("  %s", exit.name)
+			}
+		}
+
+		if len(r.players) > 1 {
+			client.Tell("The following players are here:")
+			for _, p := range r.players {
+				if p.NormalName() != player.NormalName() {
+					if p.awake {
+						client.Tell("  %s", p.name)
+					} else {
+						client.Tell("  %s (asleep)", p.name)
+					}
+				}
+			}
+		}
+	}
 }
 
 // TODO: I feel like this needs improvement.
@@ -209,17 +241,13 @@ func connectionLoop(conn net.Conn) {
 // Build up the world.
 //
 func initWorld() {
-	hall, _ := world.NewRoom("Hallway")
-	den, _ := world.NewRoom("The Den")
-	kitchen, _ := world.NewRoom("The Kitchen")
+	helm, _ := world.NewRoom("Wizard's Helm")
 
-	world.NewExit(hall, "east", den)
-	world.NewExit(den, "west", hall)
-	world.NewExit(den, "south", kitchen)
-	world.NewExit(kitchen, "north", den)
+	wizard, _ := world.NewPlayer("Wizard", "xyzzy", helm)
+	wizard.SetFlag(WizardFlag)
+	wizard.SetFlag(BuilderFlag)
 
-	world.NewPlayer("God", "xyzzy", hall)
-	world.NewPlayer("Wizard", "xyzzy", hall)
+	helm.owner = wizard
 }
 
 func init() {

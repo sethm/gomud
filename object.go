@@ -5,17 +5,58 @@ import (
 	"sync"
 )
 
+type Flags uint
+
+// Flags
+const (
+	WizardFlag     Flags = 1 << iota
+	BuilderFlag          = 1 << iota
+	ProgrammerFlag       = 1 << iota
+)
+
+func (p *Player) CanSetFlag(target Objecter, flag Flags) bool {
+	switch flag {
+	default:
+		return false // Default is resricted
+	case WizardFlag:
+		switch target.(type) {
+		default:
+			return false
+		case *Player:
+			return p.IsSet(WizardFlag)
+		}
+	case BuilderFlag:
+		switch target.(type) {
+		default:
+			return false
+		case *Player:
+			return p.IsSet(WizardFlag)
+		}
+	}
+}
+
 //
-// Everything in the world is an Object
+// Everything in the world is an Object.
 //
 type Object struct {
 	sync.RWMutex
-	key         int
-	name        string
-	normalName  string
+	// Every object in the database has a unique key. No two objects
+	// have the same key.
+	key int
+	// Everything has a displayable name.
+	name string
+	// Everything has a normalized name that's used for comparisons
+	// and lookups where case does not matter.
+	normalName string
+	// Everything has a textual description.
 	description string
-	flags       Flags
-	owner       *Player
+	// Everything has an owner. Since players are Objects, this means
+	// that even Players have owners, but we do not condone slavery
+	// here so this particular field is completely ignored on Players.
+	owner *Player
+
+	// Player flags
+	flags Flags
 }
 
 //
@@ -28,10 +69,11 @@ type Objecter interface {
 	NormalName() string
 	Description() string
 	SetDescription(s string)
-	Flags() Flags
-	SetFlags(f Flags)
 	Owner() *Player
 	SetOwner(p *Player)
+	SetFlag(f Flags)
+	ClearFlag(f Flags)
+	IsSet(f Flags) bool
 }
 
 //
@@ -67,18 +109,22 @@ func (o *Object) SetDescription(s string) {
 	o.description = s
 }
 
-func (o *Object) Flags() Flags {
-	return o.flags
-}
-
-func (o *Object) SetFlags(f Flags) {
-	o.flags = f
-}
-
 func (o *Object) Owner() *Player {
 	return o.owner
 }
 
 func (o *Object) SetOwner(p *Player) {
 	o.owner = p
+}
+
+func (o *Object) SetFlag(f Flags) {
+	o.flags = (f | BuilderFlag)
+}
+
+func (o *Object) ClearFlag(f Flags) {
+	o.flags ^= (f | BuilderFlag)
+}
+
+func (o *Object) IsSet(f Flags) bool {
+	return (o.flags & f) != 0
 }

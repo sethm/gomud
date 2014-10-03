@@ -2,8 +2,8 @@ package main
 
 import (
 	"crypto/sha512"
-	"strings"
 	"strconv"
+	"strings"
 )
 
 //
@@ -45,7 +45,6 @@ func doNewplayer(world *World, client *Client, cmd Command) {
 }
 
 func doConnect(world *World, client *Client, cmd Command) {
-
 	if cmd.target == "" || cmd.args == "" {
 		client.Tell("Try: connect <player> <password>")
 		return
@@ -74,7 +73,6 @@ func doConnect(world *World, client *Client, cmd Command) {
 
 	client.Tell("No such player!")
 	return
-
 }
 
 func doSay(world *World, client *Client, cmd Command) {
@@ -117,6 +115,11 @@ func doDig(world *World, client *Client, cmd Command) {
 	here := client.player.location
 	exitName := cmd.target
 	roomName := cmd.args
+
+	if !hasBuildPermission(client.player) {
+		client.Tell("Sorry, you don't have permission to do that.")
+		return
+	}
 
 	if exitName == "" || roomName == "" {
 		client.Tell("Dig what?")
@@ -193,7 +196,53 @@ func doHelp(world *World, client *Client, cmd Command) {
 	client.Tell("   quit                        Leave the game")
 	client.Tell("")
 	client.Tell("")
+}
 
+func doExamine(world *World, client *Client, cmd Command) {
+	target, err := world.FindTarget(client, cmd)
+
+	if err != nil {
+		client.Tell("I don't see that here.")
+		return
+	}
+
+	client.examine(target)
+}
+
+func doSet(world *World, client *Client, cmd Command) {
+	// TODO: Refactor flags into a structure with permission bits.
+	if !client.player.IsSet(WizardFlag) {
+		client.Tell("You don't have permission to do that!")
+		return
+	}
+
+	target, err := world.FindTarget(client, cmd)
+
+	if err != nil {
+		client.Tell("I don't see that here.")
+		return
+	}
+
+	if cmd.args == "" || cmd.args == "!" {
+		client.Tell("What do you want to set?")
+		return
+	}
+
+	isUnset := !strings.HasPrefix(cmd.args, "!")
+
+	flagSlice := strings.SplitN(cmd.args, "!", 2)
+	flagName := flagSlice[len(flagSlice)-1]
+
+	switch flagName {
+	case "builder":
+		if isUnset {
+			target.SetFlag(BuilderFlag)
+		} else {
+			target.ClearFlag(BuilderFlag)
+		}
+	default:
+		client.Tell("I don't know that flag.")
+	}
 }
 
 func doLook(world *World, client *Client, cmd Command) {
