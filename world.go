@@ -5,23 +5,38 @@ import (
 	"strings"
 )
 
+type SequentialIdGen func() int
+
+//
+// Generate unique IDs for objects
+//
+
+func KeyGen() func() int {
+	c := 0
+	return func() int {
+		c += 1
+		return c
+	}
+}
+
 //
 // The world is the sum total of all objects
 //
 type World struct {
+	idGen   SequentialIdGen
 	players map[int]*Player
 	rooms   map[int]*Room
 	exits   map[int]*Exit
 }
 
 func NewWorld() *World {
-	return &World{make(map[int]*Player), make(map[int]*Room), make(map[int]*Exit)}
+	return &World{KeyGen(), make(map[int]*Player), make(map[int]*Room), make(map[int]*Exit)}
 }
 
 func (w *World) NewRoom(name string) (r *Room, err error) {
 	normalName := strings.ToLower(name)
 
-	r = &Room{Object: Object{key: idGen(), name: name, normalName: normalName},
+	r = &Room{Object: Object{key: w.idGen(), name: name, normalName: normalName},
 		exits: make(map[int]*Exit), players: make(map[int]*Player)}
 	w.rooms[r.key] = r
 	return
@@ -37,7 +52,7 @@ func (w *World) NewPlayer(name string, password string, location *Room) (p *Play
 		}
 	}
 
-	p = &Player{Object: Object{key: idGen()}}
+	p = &Player{Object: Object{key: w.idGen()}}
 
 	p.SetName(name)
 	p.SetPassword(password)
@@ -84,7 +99,7 @@ func (w *World) NewExit(source *Room, name string, destination *Room) (e *Exit, 
 		}
 	}
 
-	e = &Exit{Object: Object{key: idGen()}, destination: destination}
+	e = &Exit{Object: Object{key: w.idGen()}, destination: destination}
 	e.SetName(name)
 	w.exits[e.key] = e
 	source.exits[e.key] = e

@@ -245,6 +245,39 @@ func TestDoDigCreatesRoom(t *testing.T) {
 	}
 }
 
+func TestDoDigSetsOwnershipOfNewRoom(t *testing.T) {
+	world := NewWorld()
+	conn := NewMockConn()
+	client := NewClient(conn)
+	hall, _ := world.NewRoom("The Hall")
+	bob, _ := world.NewPlayer("bob", "foo", hall)
+	hall.SetOwner(bob)
+	bob.SetFlag(BuilderFlag)
+	doConnect(world, client, Command{"connect", "bob", "foo"})
+	doDig(world, client, Command{"@dig", "east", "The Den"})
+
+	// The new room should be db #3
+	den, exists := world.rooms[3]
+
+	if !exists || den.name != "The Den" {
+		t.Errorf("Expected to find The Den")
+	}
+
+	if den.owner != bob {
+		t.Errorf("Expected bob to own The Den")
+	}
+
+	exit, exists := world.exits[4]
+
+	if !exists {
+		t.Errorf("Expected to find an exit.")
+	}
+
+	if exit.owner != bob {
+		t.Errorf("Expected bob to own the exit")
+	}
+}
+
 func TestDoDescriptionUpdatesDescription(t *testing.T) {
 	world := NewWorld()
 	conn := NewMockConn()

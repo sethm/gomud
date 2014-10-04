@@ -133,7 +133,10 @@ func doDig(world *World, client *Client, cmd Command) {
 		return
 	}
 
-	world.NewExit(here, exitName, room)
+	exit, _ := world.NewExit(here, exitName, room)
+
+	room.SetOwner(client.player)
+	exit.SetOwner(client.player)
 
 	client.Tell("Dug.")
 }

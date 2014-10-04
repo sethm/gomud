@@ -16,7 +16,6 @@ const PORT = 8888
 
 var world *World = NewWorld()
 var debugLog, infoLog, errorLog *log.Logger
-var idGen func() int = KeyGen()
 
 type CommandHandler func(*World, *Client, Command)
 
@@ -49,18 +48,6 @@ var commandHandlers = HandlerMap{
 	"@set":      {2, false, true, doSet},
 	"tell":      {2, false, true, doTell},
 	"walk":      {1, false, true, doMove},
-}
-
-//
-// Generate unique IDs for objects
-//
-
-func KeyGen() func() int {
-	c := 0
-	return func() int {
-		c += 1
-		return c
-	}
 }
 
 // A command entered at the MUD's prompt
