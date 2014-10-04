@@ -216,8 +216,8 @@ var commandInputs = []string{
 var expectedCommands = []Command{
 	{"", "", ""},
 	{"look", "", ""},
-	{"walk", "", "east"},
-	{"move", "", "west"},
+	{"walk", "east", ""},
+	{"move", "west", ""},
 	{"east", "", ""},
 	{"say", "", ""},
 	{"say", "", "foo bar baz"},

@@ -38,16 +38,16 @@ var commandHandlers = HandlerMap{
 	"ex":        {2, false, true, doExamine},
 	"newplayer": {2, true, false, doNewplayer},
 	"emote":     {1, false, true, doEmote},
-	"go":        {1, false, true, doMove},
+	"go":        {2, false, true, doMove},
 	"help":      {0, false, true, doHelp},
 	"look":      {2, false, true, doLook},
 	"l":         {2, false, true, doLook},
-	"move":      {1, false, true, doMove},
+	"move":      {2, false, true, doMove},
 	"quit":      {0, true, true, doQuit},
 	"say":       {1, false, true, doSay},
 	"@set":      {2, false, true, doSet},
 	"tell":      {2, false, true, doTell},
-	"walk":      {1, false, true, doMove},
+	"walk":      {2, false, true, doMove},
 }
 
 // A command entered at the MUD's prompt
@@ -140,7 +140,7 @@ func parseCommand(client *Client, line string) Command {
 		location := client.player.location
 		for _, exit := range location.exits {
 			if tokenized[0] == exit.name {
-				return Command{verb: "move", args: tokenized[0]}
+				return Command{verb: "move", target: tokenized[0]}
 			}
 		}
 	}

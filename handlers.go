@@ -176,9 +176,11 @@ func doMove(world *World, client *Client, cmd Command) {
 	player := client.player
 	here := player.location
 
+	normalName := strings.ToLower(cmd.target)
+
 	// Try to find an exit with the correct name.
 	for _, exit := range here.exits {
-		if exit.name == cmd.args {
+		if exit.normalName == normalName {
 			world.MovePlayer(player, exit.destination)
 			client.lookAt(player.location)
 			return
