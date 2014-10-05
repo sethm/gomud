@@ -10,40 +10,6 @@ import (
 // Handlers
 //
 
-func doNewplayer(world *World, client *Client, cmd Command) {
-
-	if cmd.target == "" || cmd.args == "" {
-		client.Tell("Try: newplayer <player> <password>")
-		return
-	}
-
-	normalName := strings.ToLower(cmd.target)
-
-	for _, player := range world.players {
-		if player.normalName == normalName {
-			client.Tell("Sorry, that name is in use.")
-			return
-		}
-	}
-
-	// Ugh, what a kludge. Need a proper framework for defining
-	// player creation room
-	startingRoom, exists := world.rooms[1]
-	if !exists {
-		client.Tell("Sorry, we can't create any players right now.")
-		return
-	}
-
-	player, err := world.NewPlayer(cmd.target, cmd.args, startingRoom)
-
-	if err != nil {
-		client.Tell("Sorry, we can't create any players right now.")
-		return
-	}
-
-	world.connectPlayer(client, player)
-}
-
 func doConnect(world *World, client *Client, cmd Command) {
 	if cmd.target == "" || cmd.args == "" {
 		client.Tell("Try: connect <player> <password>")
@@ -73,22 +39,6 @@ func doConnect(world *World, client *Client, cmd Command) {
 
 	client.Tell("No such player!")
 	return
-}
-
-func doSay(world *World, client *Client, cmd Command) {
-	client.Tell("You say, \"" + cmd.args + "\"")
-	player := client.player
-	world.TellAllButMe(player, player.name+" says, \""+cmd.args+"\"")
-}
-
-func doQuit(world *World, client *Client, cmd Command) {
-	client.quitRequested = true
-}
-
-func doEmote(world *World, client *Client, cmd Command) {
-	player := client.player
-	client.Tell(player.name + " " + cmd.args)
-	world.TellAllButMe(player, player.name+" "+cmd.args)
 }
 
 func doDesc(world *World, client *Client, cmd Command) {
@@ -141,6 +91,36 @@ func doDig(world *World, client *Client, cmd Command) {
 	client.Tell("Dug.")
 }
 
+func doEmote(world *World, client *Client, cmd Command) {
+	player := client.player
+	client.Tell(player.name + " " + cmd.args)
+	world.TellAllButMe(player, player.name+" "+cmd.args)
+}
+
+func doExamine(world *World, client *Client, cmd Command) {
+	target, err := world.FindTarget(client, cmd)
+
+	if err != nil {
+		client.Tell("I don't see that here.")
+		return
+	}
+
+	client.examine(target)
+}
+
+func doHelp(world *World, client *Client, cmd Command) {
+	client.Tell("Welcome to this experimental MUD!")
+	client.Tell("")
+	client.Tell("Basic commands are:")
+	client.Tell("   go <exit>                   Move to a new room")
+	client.Tell("   <direction>                 Move to a new room")
+	client.Tell("   @dig <exit> <name>          Dig a new room")
+	client.Tell("   @link <exit> <room_number>  Create a new exit to room #")
+	client.Tell("   quit                        Leave the game")
+	client.Tell("")
+	client.Tell("")
+}
+
 func doLink(world *World, client *Client, cmd Command) {
 	here := client.player.location
 	exitName := cmd.target
@@ -168,8 +148,15 @@ func doLink(world *World, client *Client, cmd Command) {
 	client.Tell("Linked.")
 }
 
-func doTell(world *World, client *Client, cmd Command) {
-	client.Tell("Not Implemented Yet.")
+func doLook(world *World, client *Client, cmd Command) {
+	target, err := world.FindTarget(client, cmd)
+
+	if err != nil {
+		client.Tell("I don't see that here.")
+		return
+	}
+
+	client.lookAt(target)
 }
 
 func doMove(world *World, client *Client, cmd Command) {
@@ -190,28 +177,48 @@ func doMove(world *World, client *Client, cmd Command) {
 	client.Tell("There's no exit in that direction!")
 }
 
-func doHelp(world *World, client *Client, cmd Command) {
-	client.Tell("Welcome to this experimental MUD!")
-	client.Tell("")
-	client.Tell("Basic commands are:")
-	client.Tell("   go <exit>                   Move to a new room")
-	client.Tell("   <direction>                 Move to a new room")
-	client.Tell("   @dig <exit> <name>          Dig a new room")
-	client.Tell("   @link <exit> <room_number>  Create a new exit to room #")
-	client.Tell("   quit                        Leave the game")
-	client.Tell("")
-	client.Tell("")
-}
+func doNewplayer(world *World, client *Client, cmd Command) {
 
-func doExamine(world *World, client *Client, cmd Command) {
-	target, err := world.FindTarget(client, cmd)
-
-	if err != nil {
-		client.Tell("I don't see that here.")
+	if cmd.target == "" || cmd.args == "" {
+		client.Tell("Try: newplayer <player> <password>")
 		return
 	}
 
-	client.examine(target)
+	normalName := strings.ToLower(cmd.target)
+
+	for _, player := range world.players {
+		if player.normalName == normalName {
+			client.Tell("Sorry, that name is in use.")
+			return
+		}
+	}
+
+	// Ugh, what a kludge. Need a proper framework for defining
+	// player creation room
+	startingRoom, exists := world.rooms[1]
+	if !exists {
+		client.Tell("Sorry, we can't create any players right now.")
+		return
+	}
+
+	player, err := world.NewPlayer(cmd.target, cmd.args, startingRoom)
+
+	if err != nil {
+		client.Tell("Sorry, we can't create any players right now.")
+		return
+	}
+
+	world.connectPlayer(client, player)
+}
+
+func doQuit(world *World, client *Client, cmd Command) {
+	client.quitRequested = true
+}
+
+func doSay(world *World, client *Client, cmd Command) {
+	player := client.player
+	client.Tell("You say, \"" + cmd.args + "\"")
+	world.TellAllButMe(player, player.name+" says, \""+cmd.args+"\"")
 }
 
 func doSet(world *World, client *Client, cmd Command) {
@@ -250,13 +257,6 @@ func doSet(world *World, client *Client, cmd Command) {
 	}
 }
 
-func doLook(world *World, client *Client, cmd Command) {
-	target, err := world.FindTarget(client, cmd)
-
-	if err != nil {
-		client.Tell("I don't see that here.")
-		return
-	}
-
-	client.lookAt(target)
+func doTell(world *World, client *Client, cmd Command) {
+	client.Tell("Not Implemented Yet.")
 }
