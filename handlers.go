@@ -11,13 +11,16 @@ import (
 //
 
 func doConnect(world *World, client *Client, cmd Command) {
-	if cmd.target == "" || cmd.args == "" {
+
+	nameAndPass := strings.SplitN(cmd.args, " ", 2)
+
+	if len(nameAndPass) < 2 {
 		client.Tell("Try: connect <player> <password>")
 		return
 	}
 
-	normalName := strings.ToLower(cmd.target)
-	passwordHash := sha512.Sum512([]byte(cmd.args))
+	normalName := strings.ToLower(nameAndPass[0])
+	passwordHash := sha512.Sum512([]byte(nameAndPass[1]))
 
 	for _, player := range world.players {
 		if player.normalName == normalName {
@@ -114,8 +117,8 @@ func doHelp(world *World, client *Client, cmd Command) {
 	client.Tell("Basic commands are:")
 	client.Tell("   go <exit>                   Move to a new room")
 	client.Tell("   <direction>                 Move to a new room")
-	client.Tell("   @dig <exit> <name>          Dig a new room")
-	client.Tell("   @link <exit> <room_number>  Create a new exit to room #")
+	client.Tell("   @dig <exit>=<name>          Dig a new room")
+	client.Tell("   @link <exit>=<room_number>  Create a new exit to room #")
 	client.Tell("   quit                        Leave the game")
 	client.Tell("")
 	client.Tell("")

@@ -205,12 +205,21 @@ var commandInputs = []string{
 	"east", // No such exit
 	"say",  // There's an exit named 'say', but that's a keyword!
 	"say foo bar baz",
-	"@desc me I'm very tall",
-	"tell bob Hey there!",
+	"@desc me=I'm very tall",
+	"@desc here=A tall room.",
+	"tell bob=Hey there!",
 	"\"hey bob",
 	":waves hello.",
 	"",
 	"tell bob", // Valid, but missing arg
+	"connect Wizard foobar",
+	"examine me",
+	"ex here",
+	"@dig west=The Hall",
+	"move east",
+	"walk north",
+	"@set Bob=wizard",
+	"@link west=#1",
 }
 
 var expectedCommands = []Command{
@@ -218,15 +227,24 @@ var expectedCommands = []Command{
 	{"look", "", ""},
 	{"walk", "east", ""},
 	{"move", "west", ""},
-	{"east", "", ""},
+	{"", "", ""},
 	{"say", "", ""},
 	{"say", "", "foo bar baz"},
 	{"@desc", "me", "I'm very tall"},
+	{"@desc", "here", "A tall room."},
 	{"tell", "bob", "Hey there!"},
 	{"say", "", "hey bob"},
 	{"emote", "", "waves hello."},
 	{"", "", ""},
 	{"tell", "bob", ""},
+	{"connect", "", "Wizard foobar"},
+	{"examine", "me", ""},
+	{"ex", "here", ""},
+	{"@dig", "west", "The Hall"},
+	{"move", "east", ""},
+	{"walk", "north", ""},
+	{"@set", "Bob", "wizard"},
+	{"@link", "west", "#1"},
 }
 
 func TestParseCommand(t *testing.T) {
@@ -249,7 +267,7 @@ func TestParseCommand(t *testing.T) {
 		command := parseCommand(client, cmd)
 
 		if command != expectedCommands[i] {
-			t.Errorf("%d: Expected args to be equal. Actual: %s", i, command)
+			t.Errorf("%d: Expected args to be equal. Expected: %s, Actual: %s", i, expectedCommands[i], command)
 		}
 	}
 }

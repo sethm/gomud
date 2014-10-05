@@ -19,8 +19,16 @@ var debugLog, infoLog, errorLog *log.Logger
 
 type CommandHandler func(*World, *Client, Command)
 
+type CmdType uint8
+
+const (
+	UnaryCmd CmdType = iota
+	ArgsCmd
+	TargetedCmd
+)
+
 type CommandDesc struct {
-	argCount int
+	cmdType  CmdType
 	preAuth  bool
 	postAuth bool
 	handler  CommandHandler
@@ -29,25 +37,25 @@ type CommandDesc struct {
 type HandlerMap map[string]CommandDesc
 
 var commandHandlers = HandlerMap{
-	"@desc":     {2, false, true, doDesc},
-	"@dig":      {2, false, true, doDig},
-	"@help":     {0, false, true, doHelp},
-	"@link":     {2, false, true, doLink},
-	"connect":   {2, true, false, doConnect},
-	"examine":   {2, false, true, doExamine},
-	"ex":        {2, false, true, doExamine},
-	"newplayer": {2, true, false, doNewplayer},
-	"emote":     {1, false, true, doEmote},
-	"go":        {2, false, true, doMove},
-	"help":      {0, false, true, doHelp},
-	"look":      {2, false, true, doLook},
-	"l":         {2, false, true, doLook},
-	"move":      {2, false, true, doMove},
-	"quit":      {0, true, true, doQuit},
-	"say":       {1, false, true, doSay},
-	"@set":      {2, false, true, doSet},
-	"tell":      {2, false, true, doTell},
-	"walk":      {2, false, true, doMove},
+	"@desc":     {TargetedCmd, false, true, doDesc},
+	"@dig":      {TargetedCmd, false, true, doDig},
+	"@help":     {UnaryCmd, false, true, doHelp},
+	"@link":     {TargetedCmd, false, true, doLink},
+	"connect":   {ArgsCmd, true, false, doConnect},
+	"examine":   {TargetedCmd, false, true, doExamine},
+	"ex":        {TargetedCmd, false, true, doExamine},
+	"newplayer": {TargetedCmd, true, false, doNewplayer},
+	"emote":     {ArgsCmd, false, true, doEmote},
+	"go":        {TargetedCmd, false, true, doMove},
+	"help":      {UnaryCmd, false, true, doHelp},
+	"look":      {TargetedCmd, false, true, doLook},
+	"l":         {TargetedCmd, false, true, doLook},
+	"move":      {TargetedCmd, false, true, doMove},
+	"quit":      {UnaryCmd, true, true, doQuit},
+	"say":       {ArgsCmd, false, true, doSay},
+	"@set":      {TargetedCmd, false, true, doSet},
+	"tell":      {TargetedCmd, false, true, doTell},
+	"walk":      {TargetedCmd, false, true, doMove},
 }
 
 // A command entered at the MUD's prompt
@@ -118,24 +126,34 @@ func (client *Client) lookAt(o Objecter) {
 	}
 }
 
-// TODO: I feel like this needs improvement.
 func parseCommand(client *Client, line string) Command {
-	// The user may have typed `"foo`, which we want to interpret
-	// as "say foo".
+
+	// First up, we do some special processing to normalize the input,
+	// for the case where the user may be typing a command like '"foo'
+	// as shortcut for 'say foo', or ':bar' as a shortcut for 'emote
+	// bar'. This is a hack, but a useful one.
+
 	if strings.HasPrefix(line, "\"") {
-		return Command{verb: "say", args: line[1:len(line)]}
+		line = "say " + line[1:len(line)]
+	} else if strings.HasPrefix(line, ":") {
+		line = "emote " + line[1:len(line)]
 	}
 
-	if strings.HasPrefix(line, ":") {
-		return Command{verb: "emote", args: line[1:len(line)]}
-	}
+	// Now we further tokenize the line into VERB and ARGS
 
 	tokenized := strings.SplitN(line, " ", 2)
 
 	verb := tokenized[0]
+
 	info, isKeyword := commandHandlers[verb]
 
-	// See if we should treat the verb as an exit direction
+	// Now we have a further complication. We allow the user to use a
+	// shortcut for moving around the world. For example, if there is
+	// an exit named "west", the user can just type "west" to move
+	// there. If the verb is the name of a direction, we short-circuit
+	// and return a Command of the right form. We only do this,
+	// though, if the command is not a keyword.
+
 	if !isKeyword && client.player != nil {
 		location := client.player.location
 		for _, exit := range location.exits {
@@ -145,13 +163,25 @@ func parseCommand(client *Client, line string) Command {
 		}
 	}
 
+	// Now with that out of the way, we can proceed to tokenize the
+	// rest of the command appropriately.
+
+	// No idea what to do, it's not a keyord. Return 0-command.
+	if !isKeyword {
+		return Command{}
+	}
+
 	if len(tokenized) == 1 {
 		return Command{verb: verb}
 	}
 
-	if info.argCount == 2 {
+	if info.cmdType == ArgsCmd {
+		return Command{verb: verb, args: tokenized[1]}
+	}
+
+	if info.cmdType == TargetedCmd {
 		// Further tokenize the args into target/args
-		argTokens := strings.SplitN(tokenized[1], " ", 2)
+		argTokens := strings.SplitN(tokenized[1], "=", 2)
 
 		if len(argTokens) == 1 {
 			return Command{verb: verb, target: argTokens[0]}
@@ -160,7 +190,7 @@ func parseCommand(client *Client, line string) Command {
 		return Command{verb: verb, target: argTokens[0], args: argTokens[1]}
 	}
 
-	return Command{verb: verb, args: tokenized[1]}
+	return Command{} // Catch-all, 0-command
 }
 
 func welcome(client *Client) {

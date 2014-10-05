@@ -15,7 +15,7 @@ func TestDoConnectShouldWakeUpPlayers(t *testing.T) {
 		t.Errorf("Bob should not be awake.")
 	}
 
-	doConnect(world, client, Command{"connect", "bob", "foo"})
+	doConnect(world, client, Command{"connect", "", "bob foo"})
 
 	if client.player != bob {
 		t.Errorf("Connecting should have linked the client and the player")
@@ -38,13 +38,13 @@ func TestDoConnectShouldNotConnectMultipleTimes(t *testing.T) {
 	hall, _ := world.NewRoom("The Hall")
 	bob, _ := world.NewPlayer("bob", "foo", hall)
 
-	doConnect(world, clientA, Command{"connect", "bob", "foo"})
+	doConnect(world, clientA, Command{"connect", "", "bob foo"})
 
 	if clientA.player != bob || bob.client != clientA {
 		t.Errorf("Connecting should have linked the client and the player")
 	}
 
-	doConnect(world, clientB, Command{"connect", "bob", "foo"})
+	doConnect(world, clientB, Command{"connect", "", "bob foo"})
 
 	if clientB.player == bob || bob.client == clientB {
 		t.Errorf("Should NOT be able to connect to the same player twice.")
@@ -58,7 +58,7 @@ func TestDoConnectDoesNothingIfPlayerNotFound(t *testing.T) {
 	hall, _ := world.NewRoom("The Hall")
 	bob, _ := world.NewPlayer("bob", "foo", hall)
 
-	doConnect(world, client, Command{"connect", "jim", "foo"})
+	doConnect(world, client, Command{"connect", "", "jim foo"})
 
 	assertMatch(t, "No such player!\r\n", conn.String())
 
@@ -74,7 +74,7 @@ func TestDoConnectWithoutPasswordFails(t *testing.T) {
 	hall, _ := world.NewRoom("The Hall")
 	bob, _ := world.NewPlayer("bob", "foo", hall)
 
-	doConnect(world, client, Command{"connect", "bob", ""})
+	doConnect(world, client, Command{"connect", "", "bob"})
 
 	assertMatch(t, "Try: connect <player> <password>\r\n", conn.String())
 
@@ -90,7 +90,7 @@ func TestDoConnectWithWrongPasswordFails(t *testing.T) {
 	hall, _ := world.NewRoom("The Hall")
 	bob, _ := world.NewPlayer("bob", "foo", hall)
 
-	doConnect(world, client, Command{"connect", "bob", "bar"})
+	doConnect(world, client, Command{"connect", "", "bob bar"})
 
 	assertMatch(t, "Incorrect password.\r\n", conn.String())
 
@@ -128,8 +128,8 @@ func TestDoSay(t *testing.T) {
 	world.NewPlayer("bob", "foo", hall)
 	world.NewPlayer("jim", "foo", hall)
 
-	doConnect(world, bobClient, Command{"connect", "bob", "foo"})
-	doConnect(world, jimClient, Command{"connect", "jim", "foo"})
+	doConnect(world, bobClient, Command{"connect", "", "bob foo"})
+	doConnect(world, jimClient, Command{"connect", "", "jim foo"})
 
 	doSay(world, bobClient, Command{"say", "", "Testing 1 2 3"})
 
@@ -150,8 +150,8 @@ func TestDoEmote(t *testing.T) {
 	world.NewPlayer("bob", "foo", hall)
 	world.NewPlayer("jim", "foo", hall)
 
-	doConnect(world, bobClient, Command{"connect", "bob", "foo"})
-	doConnect(world, jimClient, Command{"connect", "jim", "foo"})
+	doConnect(world, bobClient, Command{"connect", "", "bob foo"})
+	doConnect(world, jimClient, Command{"connect", "", "jim foo"})
 
 	doEmote(world, bobClient, Command{"emote", "", "tests."})
 
@@ -198,8 +198,8 @@ func TestDoLookShowsHereByDefault(t *testing.T) {
 	world.NewPlayer("jim", "foo", hall)
 	world.NewPlayer("sally", "foo", hall)
 
-	doConnect(world, bobClient, Command{"connect", "bob", "foo"})
-	doConnect(world, sallyClient, Command{"connect", "sally", "foo"})
+	doConnect(world, bobClient, Command{"connect", "", "bob foo"})
+	doConnect(world, sallyClient, Command{"connect", "", "sally foo"})
 
 	doLook(world, bobClient, Command{"look", "", ""})
 
@@ -224,7 +224,7 @@ func TestDoDigCreatesRoom(t *testing.T) {
 	hall.SetOwner(bob)
 	bob.SetFlag(BuilderFlag)
 
-	doConnect(world, client, Command{"connect", "bob", "foo"})
+	doConnect(world, client, Command{"connect", "", "bob foo"})
 
 	if len(world.rooms) != 1 {
 		t.Errorf("There should be only 1 room")
@@ -253,7 +253,7 @@ func TestDoDigSetsOwnershipOfNewRoom(t *testing.T) {
 	bob, _ := world.NewPlayer("bob", "foo", hall)
 	hall.SetOwner(bob)
 	bob.SetFlag(BuilderFlag)
-	doConnect(world, client, Command{"connect", "bob", "foo"})
+	doConnect(world, client, Command{"connect", "", "bob foo"})
 	doDig(world, client, Command{"@dig", "east", "The Den"})
 
 	// The new room should be db #3
@@ -286,7 +286,7 @@ func TestDoDescriptionUpdatesDescription(t *testing.T) {
 	bob, _ := world.NewPlayer("bob", "foo", hall)
 	hall.SetOwner(bob)
 
-	doConnect(world, client, Command{"connect", "bob", "foo"})
+	doConnect(world, client, Command{"connect", "", "bob foo"})
 
 	doDesc(world, client, Command{"@desc", "me", "Bob is really tall."})
 
@@ -307,8 +307,8 @@ func TestDoDescriptionOnlyUpdatesDescIfPlayerIsTheOwner(t *testing.T) {
 	jim, _ := world.NewPlayer("jim", "foo", hall)
 	hall.SetOwner(jim)
 
-	doConnect(world, bobClient, Command{"connect", "bob", "foo"})
-	doConnect(world, jimClient, Command{"connect", "jim", "foo"})
+	doConnect(world, bobClient, Command{"connect", "", "bob foo"})
+	doConnect(world, jimClient, Command{"connect", "", "jim foo"})
 	doDesc(world, bobClient, Command{"@desc", "here", "The Hallway is long"})
 
 	if hall.Description() != "The Hall Is Dark" {
@@ -333,7 +333,7 @@ func TestDoSetSetsBuilderFlag(t *testing.T) {
 
 	wizard.SetFlag(WizardFlag)
 
-	doConnect(world, wizardClient, Command{"connect", "wizard", "foo"})
+	doConnect(world, wizardClient, Command{"connect", "", "wizard foo"})
 
 	if jim.IsSet(BuilderFlag) {
 		t.Errorf("Jim should not be a builder.")
@@ -364,7 +364,7 @@ func TestDoSetBuilderFlagRequiresWizardPermissions(t *testing.T) {
 	wizard.SetFlag(WizardFlag)
 	wizard.SetFlag(BuilderFlag)
 
-	doConnect(world, jimClient, Command{"connect", "jim", "foo"})
+	doConnect(world, jimClient, Command{"connect", "", "jim foo"})
 
 	if !wizard.IsSet(BuilderFlag) {
 		t.Errorf("Wizard should be a builder at start.")
