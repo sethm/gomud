@@ -264,7 +264,7 @@ func TestParseCommand(t *testing.T) {
 	client.player = player
 
 	for i, cmd := range commandInputs {
-		command := parseCommand(client, cmd)
+		command, _ := parseCommand(client, cmd)
 
 		if command != expectedCommands[i] {
 			t.Errorf("%d: Expected args to be equal. Expected: %s, Actual: %s", i, expectedCommands[i], command)

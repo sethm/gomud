@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -126,7 +127,7 @@ func (client *Client) lookAt(o Objecter) {
 	}
 }
 
-func parseCommand(client *Client, line string) Command {
+func parseCommand(client *Client, line string) (Command, error) {
 
 	// First up, we do some special processing to normalize the input,
 	// for the case where the user may be typing a command like '"foo'
@@ -158,25 +159,24 @@ func parseCommand(client *Client, line string) Command {
 		location := client.player.location
 		for _, exit := range location.exits {
 			if tokenized[0] == exit.name {
-				return Command{verb: "move", target: tokenized[0]}
+				return Command{verb: "move", target: tokenized[0]}, nil
 			}
 		}
+	}
+
+	if !isKeyword {
+		return Command{}, errors.New("No such command")
 	}
 
 	// Now with that out of the way, we can proceed to tokenize the
 	// rest of the command appropriately.
 
-	// No idea what to do, it's not a keyord. Return 0-command.
-	if !isKeyword {
-		return Command{}
-	}
-
 	if len(tokenized) == 1 {
-		return Command{verb: verb}
+		return Command{verb: verb}, nil
 	}
 
 	if info.cmdType == ArgsCmd {
-		return Command{verb: verb, args: tokenized[1]}
+		return Command{verb: verb, args: tokenized[1]}, nil
 	}
 
 	if info.cmdType == TargetedCmd {
@@ -184,13 +184,13 @@ func parseCommand(client *Client, line string) Command {
 		argTokens := strings.SplitN(tokenized[1], "=", 2)
 
 		if len(argTokens) == 1 {
-			return Command{verb: verb, target: argTokens[0]}
+			return Command{verb: verb, target: argTokens[0]}, nil
 		}
 
-		return Command{verb: verb, target: argTokens[0], args: argTokens[1]}
+		return Command{verb: verb, target: argTokens[0], args: argTokens[1]}, nil
 	}
 
-	return Command{} // Catch-all, 0-command
+	return Command{}, errors.New("No such command") // Catch-all, 0-command
 }
 
 func welcome(client *Client) {
@@ -230,11 +230,14 @@ func connectionLoop(conn net.Conn) {
 		line := strings.TrimSpace(string(linebuf[:n]))
 
 		if len(line) > 0 {
-			command := parseCommand(client, line)
-			debugLog.Println("Parsed command:", command)
-			if command.verb != "" {
-				world.handleCommand(&commandHandlers, client, command)
+			command, error := parseCommand(client, line)
+
+			if error != nil {
+				client.Tell("Huh?")
+				continue
 			}
+
+			world.handleCommand(&commandHandlers, client, command)
 		}
 
 		if client.quitRequested {
