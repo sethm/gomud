@@ -225,6 +225,7 @@ func doSay(world *World, client *Client, cmd Command) {
 }
 
 func doSet(world *World, client *Client, cmd Command) {
+
 	// TODO: Refactor flags into a structure with permission bits.
 	if !client.player.IsSet(WizardFlag) {
 		client.Tell("You don't have permission to do that!")
@@ -254,6 +255,12 @@ func doSet(world *World, client *Client, cmd Command) {
 			target.SetFlag(BuilderFlag)
 		} else {
 			target.ClearFlag(BuilderFlag)
+		}
+	case "wizard":
+		if isUnset {
+			target.SetFlag(WizardFlag)
+		} else {
+			target.ClearFlag(WizardFlag)
 		}
 	default:
 		client.Tell("I don't know that flag.")
