@@ -16,3 +16,24 @@ type Player struct {
 func (p *Player) SetPassword(raw string) {
 	p.password = sha512.Sum512([]byte(raw))
 }
+
+func (p *Player) CanSetFlag(target Objecter, flag Flags) bool {
+	switch flag {
+	default:
+		return false // Default is resricted
+	case WizardFlag:
+		switch target.(type) {
+		default:
+			return false
+		case *Player:
+			return p.IsSet(WizardFlag)
+		}
+	case BuilderFlag:
+		switch target.(type) {
+		default:
+			return false
+		case *Player:
+			return p.IsSet(WizardFlag)
+		}
+	}
+}

@@ -14,27 +14,6 @@ const (
 	ProgrammerFlag       = 1 << iota
 )
 
-func (p *Player) CanSetFlag(target Objecter, flag Flags) bool {
-	switch flag {
-	default:
-		return false // Default is resricted
-	case WizardFlag:
-		switch target.(type) {
-		default:
-			return false
-		case *Player:
-			return p.IsSet(WizardFlag)
-		}
-	case BuilderFlag:
-		switch target.(type) {
-		default:
-			return false
-		case *Player:
-			return p.IsSet(WizardFlag)
-		}
-	}
-}
-
 //
 // Everything in the world is an Object.
 //
